@@ -1,0 +1,20 @@
+{
+  "Settings": [
+    {
+		"name": "Settings",
+		"icon": "assets/Images/settings.svg",
+		"enabled": true,
+		"licensed": true,
+		"submodules": [
+            {
+            "name": "Settings",
+            "icon": "assets/Images/settings.svg",
+		    "file": "Settings.views.settings_module",
+		    "class": "Settings",
+            "enabled": true,
+            "licensed": true
+            }
+        ]
+	}
+	]
+}

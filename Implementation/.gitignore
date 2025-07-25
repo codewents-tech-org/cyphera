@@ -1,0 +1,8 @@
+env/
+output/
+database.db
+.pyc
+_pycache_/
+build/
+dist/
+pyc

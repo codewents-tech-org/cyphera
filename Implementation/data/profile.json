@@ -1,0 +1,36 @@
+{
+  "Profile": [
+    {
+      "name": "Profile",
+      "icon": "assets/Images/profile.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+            {
+            "name": "Profile",
+            "icon": "assets/Images/profile_details.svg",
+		    "file": "Profile.Profiledetails.Views.profile_details",
+		    "class": "ProfileDetails",
+            "enabled": true,
+            "licensed": true
+            },
+            {
+            "name": "Billing and Purchase",
+            "icon": "assets/Images/Billing_and_Purchase.svg",
+		    "file": "Profile.Profilebillingdetails.views.profile_billing",
+		    "class": "ProfileBilling",
+            "enabled": true,
+            "licensed": true
+            },
+            {
+            "name": "Support",
+            "icon": "assets/Images/Support.svg",
+		    "file": "Profile.Profilesupport.views.profile_support",
+		    "class": "ProfileSupport",
+            "enabled": true,
+            "licensed": true
+            }
+        ]
+	}
+    ]
+}
