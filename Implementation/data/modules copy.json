@@ -1,0 +1,252 @@
+{
+	"modules": [
+    {
+      "name": "Target Of Evaluation",
+      "icon": "assets/Images/target_of_Evaluation.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+           {
+          "name": "System Description",
+          "icon": "assets/Images/system_description.svg",
+		  "file": "Target_Of_Evaluation.System_Description.views.System_description_action",
+		  "class": "SystemDescriptionWidget",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Scope Description",
+          "icon": "assets/Images/scope_description.svg",
+		  "file": "Target_Of_Evaluation.Scope_Description.views.Scope_description_action",
+		  "class": "ScopeDescriptionWidget",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Scope",
+          "icon": "assets/Images/scope.svg",
+		  "file": "Target_Of_Evaluation.Scope.views.Scope_action",
+		  "class": "ScopeModule",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Assumptions",
+          "icon": "assets/Images/assumptions.svg",
+		  "file": "Target_Of_Evaluation.Assumptions.views.Assumptions_action",
+		  "class": "Assumptions",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Misuse cases",
+          "icon": "assets/Images/misuse.svg",
+		  "file": "Target_Of_Evaluation.Misuse_Cases.views.Misusecase_action",
+		  "class": "MisuseCases",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "TOE Configuration",
+          "icon": "assets/Images/toe_config.svg",
+		  "file": "Target_Of_Evaluation.TOE_Configuration.views.TOE_Configuration_action",
+		  "class": "TOEConfiguration",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Analysis",
+      "icon": "assets/Images/analysis.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Assets",
+          "icon": "assets/Images/assets.svg",
+		  "file": "Analysis.Asset.views.Asset_action",
+		  "class": "Asset_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Damage Scenarios",
+          "icon": "assets/Images/damage.svg",
+		  "file": "Analysis.Damage_Scenarios.views.DamageScenarios_action",
+		  "class": "DS_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Threats",
+          "icon": "assets/Images/threat.svg",
+		  "file": "Analysis.Threats.views.Threat_action",
+		  "class": "Threat_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Threat Scenarios",
+          "icon": "assets/Images/threat_scenario.svg",
+		  "file": "Analysis.Threat_Scenarios.views.ThreatScenarios_action",
+		  "class": "TS_Module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Security Measurement",
+      "icon": "assets/Images/security_measurement.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Security Claims",
+          "icon": "assets/Images/claims.svg",
+		  "file": "Security_Measurement.Security_Claims.views.SecurityClaims_action",
+		  "class": "SecurityClaims_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Security Goals",
+          "icon": "assets/Images/goals.svg",
+		  "file": "Security_Measurement.Security_Goals.views.SecurityGoals_action",
+		  "class": "SecurityGoals_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Security Controls",
+          "icon": "assets/Images/controls.svg",
+		  "file": "Security_Measurement.Security_Controls.views.SecurityControls_action",
+		  "class": "SecurityControls_Module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "icon": "assets/Images/catalog.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Threat Catalog",
+          "icon": "assets/Images/threat_catalog.svg",
+		  "file": "Catalog.Threat_Catalog.views.Threat_catalog_action",
+		  "class": "ThreatCatalog_Module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Attack Paths",
+      "icon": "assets/Images/attack_paths.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Attack Tree",
+          "icon": "assets/Images/attack_tree.svg",
+		  "file": "Attack_Paths.Attack_Tree.views.AttackTree_action",
+		  "class": "Attack_Tree",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Technical Attack Tree",
+          "icon": "assets/Images/technical_attack.svg",
+		  "file": "Attack_Paths.Technical_Attack_Tree.views.technicaltree_action",
+		  "class": "Technical_Tree",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Risk Control Tree",
+          "icon": "assets/Images/risk_control.svg",
+		  "file": "Attack_Paths.RiskControl_Tree.views.RiskControlTree_action",
+		  "class": "RiskControl_Tree",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Attack Leaves",
+          "icon": "assets/Images/attack_leaves.svg",
+		  "file": "Attack_Paths.Attack_Leaves.views.AttackLeaves_action",
+		  "class": "Attack_Leaves",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Risk Assessment",
+      "icon": "assets/Images/Risk_Assessment_New.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Risk Treatment",
+          "icon": "assets/Images/risk_treatment.svg",
+		  "file": "Risk_Assessment.Risk_Treatment.views.RiskTreatment_action",
+		  "class": "RiskTreatement_Module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Summary",
+      "icon": "assets/Images/summary.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Traceability Graph",
+          "icon": "assets/Images/traceability.svg",
+		  "file": "Summary.Traceability_Graph.views.TraceabilityGraph_action",
+		  "class": "TraceabilityGraph_Module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Management Summary",
+          "icon": "assets/Images/management.svg",
+		  "file": "Summary.Management_Summary.views.ManagementSummary_action",
+		  "class": "ManagementSummary_module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Report",
+      "icon": "assets/Images/report.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Generate Report",
+          "icon": "assets/Images/generate_report.svg",
+		  "file": "Reports.Generate_Reports.views.GenerateReport_action",
+		  "class": "GenerateReport_module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "PEN Test Cases Report",
+          "icon": "assets/Images/pen_test.svg",
+		  "file": "Reports.PEN_Testcases_Report.views.PENTestcasesReport_action",
+		  "class": "PenTestReportModule",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    }
+  ]
+}
