@@ -1,4 +1,6 @@
 
+from controllers.database_tables.target_of_evaluation_tables import ScopeMindmaps
+from controllers.schema_manager import get_instances_like
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
                              QTableWidgetItem, QApplication, QPushButton, QStyledItemDelegate,
                              QMessageBox, QToolBar, QMainWindow, QLineEdit, QLabel, QComboBox,
@@ -90,33 +92,35 @@ def display_selected_row(selected_option, table, property_controls, damage_scena
         pass
         # QMessageBox.critical(None, "Error", f"Error loading data: {e}")
 def asset_display_selected_row(table, asset_property_controls, property_panel, toggle_button):
-    print("check property panel data printed-------------------------22222222222222")
     try:
-        if table.selectionModel().hasSelection():  # Only then define selected_row!
-            selected_row = table.selectionModel().currentIndex().row()
+        if table.selectedIndexes():  # Check if any row is selected
+            selected_row = table.currentRow()
             print(f"[asset_display] Populating for row: {selected_row}")
-            if selected_row < 0:  # No valid row selected
+
+            if selected_row < 0:
                 property_panel.setEnabled(False)
                 property_panel.setVisible(False)
                 toggle_button.setEnabled(False)
                 return
 
-            # Enable the property panel and toggle button when a valid row is selected
+            # Enable and show the property panel
             property_panel.setEnabled(True)
             property_panel.setVisible(True)
             toggle_button.setEnabled(True)
 
-            # Display data in the property panel
+            # Display actual row data
             asset_display(table, selected_row, asset_property_controls)
         else:
-            # Disable and hide the property panel when no rows are selected
+            # Disable and hide panel if no selection
             property_panel.setEnabled(False)
             property_panel.setVisible(False)
             toggle_button.setEnabled(False)
-            # Reset the property panel values
+
+            # Clear property controls
             asset_display_reset(asset_property_controls)
     except Exception as e:
-        print(f"Error in asset_display_selected_row: {e}")  # Print error for debugging
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.critical(None, "Error", f"Error loading data: {e}")
 
 # def asset_display_selected_row(table, property_controls, property_panel, toggle_button):
 #     try:
@@ -246,21 +250,41 @@ def ts_display_selected_row(table, property_controls, toes_menu, property_panel,
 
 def asset_display(table, selected_row, asset_property_controls):
     try:
-        existing_data = DB.execute_db("SELECT Asset FROM scope_home_mindmap_dumy")
-        existing_scope_assets = [row[0] for row in existing_data]
-        
-        asset_id = table.item(selected_row, 1).text()
-        asset_property_controls[0][1].setText(asset_id)
-        asset_property_controls[1][1].setReadOnly(True) if asset_id in existing_scope_assets else asset_property_controls[1][1].setReadOnly(False)
-        asset_property_controls[1][1].setText(table.item(selected_row, 2).text())
-        asset_property_controls[2][1].set_text(table.cellWidget(selected_row, 3).currentText())
-        description_data=''
-        if table.item(selected_row, 4) != None: 
-            description_data = table.item(selected_row, 4).text()
-        asset_property_controls[3][1].setText(description_data)
-        asset_property_controls[4][1].setText(table.item(selected_row, 5).text())
+        # ✅ Use schema_manager to get existing assets from scope_home_mindmap_dumy
+        # existing_scope_assets = [
+        #     row.asset for row in get_instances_like(ScopeMindmaps,   "asset", like_pattern="AST-%")
+        # ]
+
+        # # ID
+        # asset_id = table.item(selected_row, 1).text()
+        # asset_property_controls[0][1].setText(asset_id)
+
+        # # Name with conditional read-only
+        # asset_name_widget = asset_property_controls[1][1]
+        # if asset_id in existing_scope_assets:
+        #     asset_name_widget.setReadOnly(True)
+        # else:
+        #     asset_name_widget.setReadOnly(False)
+        # asset_name_widget.setText(table.item(selected_row, 2).text())
+
+        # Security Properties (Multiselect Combo)
+        cell_widget = table.cellWidget(selected_row, 3)
+        if hasattr(cell_widget, "selected_items"):
+            selected = cell_widget.selected_items()
+            asset_property_controls[2][1].set_selected_items(selected)
+        else:
+            asset_property_controls[2][1].set_selected_items([])
+
+        # Description
+        description = table.item(selected_row, 4).text() if table.item(selected_row, 4) else ""
+        asset_property_controls[3][1].setText(description)
+
+        # Comments
+        comments = table.item(selected_row, 5).text() if table.item(selected_row, 5) else ""
+        asset_property_controls[4][1].setText(comments)
+
     except Exception as e:
-        pass
+        print(f"[asset_display] ❌ Error displaying row data: {e}")
 
 def asset_display_reset(asset_property_controls):
     try:

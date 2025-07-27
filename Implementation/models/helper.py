@@ -13,7 +13,7 @@ submodulePanel_Selector = ''
 analysisaction_selector = ''
 damage_scenario_menu = []
 
-assert_securityproperty_menu = ["Confidentiality", "Integrity", "Availability", "Authenticity", "Correctness", "Freshness", "Authorization", "Non-repudiation"]
+asset_security_properties_menu = ["Confidentiality", "Integrity", "Availability", "Authenticity", "Correctness", "Freshness", "Authorization", "Non-repudiation"]
 DS_impact_menu = ['Severe', 'Major', 'Moderate', 'Negligible']
 DS_impactcatagory_menu = ['Operational', 'Financial', 'Safety', 'Privacy']
 RA_Responsible_menu = ['Ettiksoft', 'Customer', 'Supplier']

@@ -68,12 +68,12 @@ Change History:
 """
 
 
-from models.helper import assert_securityproperty_menu
+from models.helper import asset_security_properties_menu
 
 PROPERTY_CONFIG = [
     {"label": "ID", "type": "line", "readonly": True},
     {"label": "Name", "type": "multiline", "signal": "on_asset_property_name_changed"},
-    {"label": "Security Properties", "type": "multiselect", "items": assert_securityproperty_menu, "signal": "on_asset_property_securityproperty_changed"},
+    {"label": "Security Properties", "type": "multiselect", "items": asset_security_properties_menu, "signal": "on_asset_property_securityproperty_changed"},
     {"label": "Description", "type": "multiline", "signal": "on_asset_property_description_changed"},
     {"label": "Comments", "type": "multiline", "signal": "on_asset_property_comment_changed"}
 ]
