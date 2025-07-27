@@ -2,6 +2,8 @@ from datetime import datetime
 import random
 import string
 from typing import Self
+
+from Target_Of_Evaluation.Scope.controllers.mindmap_manager import find_duplicates
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -11,7 +13,7 @@ import math
 import re
 import sqlite3
 import controllers.DatabaseCreator as DB
-from Target_Of_Evaluation.Scope.controllers.scope_synchronizations import find_duplicates
+
 import utils.interface_utils as interfaces
 from controllers.schema_manager import update_all_instances, get_unique_instances, get_first_instance
 from controllers.tablemodel import ScopeHomeMindmap, ScopeMindmaps, MindmapNodeType
@@ -413,6 +415,7 @@ class AttributeDialog2(QDialog):
             scope_id = self.item.scope_id  # Fallback to original scope_id
             scope_name = text.strip()
 
+        print("scope mind map name  dup",scope_name)
         count = find_duplicates(self.previous_text, scope_name.strip())
 
         if count != 0:

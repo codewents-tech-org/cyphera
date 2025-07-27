@@ -11,7 +11,7 @@ import models.helper as helper
 
 import controllers.DatabaseCreator as DB
 #from Attack_Paths.Attack_Tree.controllers.Attack_RiskControlTree_Update import Attack_RiskControlTree_Update
-from Attack_Paths.controllers.Update_Connected_Modules import Update_Threat_Table, Update_TechnicalTree_Table, Update_RiskControlTree_Table, Update_AttackTree_Table, Update_RiskTreatment_Table
+from Attack_Paths.controllers.Update_Connected_Modules import update_threat_table, update_technicaltree_table, update_riskcontroltree_table, update_attacktree_table, update_risktreatment_table
 import re
 import logging
 from controllers.schema_manager import (
@@ -204,7 +204,7 @@ def update_threatscenario_from_threat():
 
 
     # Function to generate a unique threat scenario ID
-    def generate_unique_ts_id():
+def generate_unique_ts_id():
         try:
             # Get max suffix from both threat_scenarios and trash (optional if trash is modeled)
             max_suffix = get_max_numeric_suffix(ThreatScenarios, 'ts_id', prefix="TS")
@@ -213,7 +213,7 @@ def update_threatscenario_from_threat():
             logger.exception("Error generating unique TS ID")
             return ""
 
-    def sync_threat_scenarios(threat_damage_map, threat_name_map, threat_toe_config_map, damage_scenario_map, existing_threat_ds_map):
+def sync_threat_scenarios(threat_damage_map, threat_name_map, threat_toe_config_map, damage_scenario_map, existing_threat_ds_map):
         # ✅ Step 1: Fetch existing ThreatScenarios for update or match
         existing_ts = get_instances(ThreatScenarios, {})
         existing_pairs = {
@@ -853,8 +853,8 @@ def remove_orphaned_attack_tree_rows():
             delete_instance(AttackTree, {'node_id': node.node_id})
 
     # ✅ Step 4: Call tree table updates (assumes these are defined elsewhere)
-    Update_RiskControlTree_Table()
-    Update_TechnicalTree_Table()
+    update_riskcontroltree_table()
+    update_technicaltree_table()
 
 def update_attack_tree_text():
     logger.info("🔄 Updating attack_tree.text values based on Threat names")
@@ -1037,7 +1037,7 @@ def update_risktreatement_data():
                 delete_instance(RiskData, {'rd_id': rd.rd_id})
                 logger.info(f"🗑️ Deleted orphan RiskData: {rd.rd_id}")
 
-        Update_RiskTreatment_Table()
+        update_risktreatment_table()
 
     except Exception as e:
         QMessageBox.critical(None, "Database Error", f"Error updating risk treatment: {e}")
@@ -1064,11 +1064,11 @@ def remove_riskcontrol_from_attack_tree_rows(control_id):
         #Attack_RiskControlTree_Update(threat_id)
 
     # ✅ Step 3: Refresh relevant trees
-    Update_Threat_Table()
-    Update_AttackTree_Table()
-    Update_RiskControlTree_Table()
-    Update_RiskTreatment_Table()
-    Update_TechnicalTree_Table()
+    update_threat_table()
+    update_attacktree_table()
+    update_riskcontroltree_table()
+    update_risktreatment_table()
+    update_technicaltree_table()
 
 def remove_nonexistent_threat_scenarios_from_Risk_data():
     logger.info("🔄 Removing RiskData rows where ts_id does not exist in ThreatScenarios")

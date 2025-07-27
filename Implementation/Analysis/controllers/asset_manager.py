@@ -3,7 +3,7 @@
 import logging
 from collections import OrderedDict
 # --- Add to asset_manager.py (top) ---
-from controllers.schema_manager import get_max_numeric_suffix
+from controllers.schema_manager import bulk_update_instances, get_max_numeric_suffix
 
 from controllers.schema_manager import (
     get_instances, get_first_instance, update_instance, create_instance, delete_instance
@@ -65,8 +65,9 @@ def persist_asset_changes():
             })
             entry['changed'] = False
     if updates:
-        update_instance(Assets, updates)
+        bulk_update_instances(Assets, updates, filter_key="asset_id")  # ✅ FIXED
         logger.info(f"🔄 Updated {len(updates)} assets in DB.")
+
 
 def refresh_assets_cache():
     """
@@ -107,7 +108,7 @@ def generate_new_asset_id():
             last_asset_number = 0
 
     last_asset_number += 1
-    return f"ASSET-{last_asset_number}"
+    return f"AST-{last_asset_number}"
 
 
 def is_asset_name_duplicate(name, exclude_asset_id=None):

@@ -1,7 +1,7 @@
 
 from controllers.tablemodel import AttackIntermediateNodes, AttackLeafNodes, RiskControlTree, TechnicalAttackTree
 from controllers.schema_manager import get_instances, get_max_numeric_suffix, get_first_instance
-
+from Attack_Paths.RiskControl_Tree.controllers.database_to_rct import build_rc_tree_json
 from Attack_Paths.Technical_Attack_Tree.controllers.database_to_tat import build_ta_tree_json
 
 

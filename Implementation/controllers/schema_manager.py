@@ -43,7 +43,7 @@ from controllers.database import get_engine_and_session
 @db_error_handler
 @handle_db_session
 def create_instance(instance, session=None):
-    from sqlalchemy import inspect
+  
     import time
 
     for attempt in range(3):
@@ -427,3 +427,18 @@ def bulk_delete_with_like_and_types(session, model, like_field, like_value, node
     print(f"[DEBUG][DELETE] Deleting {query.count()} rows from {model.__tablename__} where node_type in {node_types} and {like_field} LIKE '{like_value}'")
     query.delete(synchronize_session=False)
     session.commit()
+
+
+@db_error_handler
+@handle_db_session
+def get_instances_like(model, column_name, like_pattern, extra_filters=None, session=None):
+    column = getattr(model, column_name)
+    query = session.query(model).filter(column.like(like_pattern))
+    if extra_filters:
+        query = query.filter_by(**extra_filters)
+    results = query.all()
+    for obj in results:
+        for col in inspect(obj).mapper.column_attrs:
+            getattr(obj, col.key)
+        session.expunge(obj)
+    return results

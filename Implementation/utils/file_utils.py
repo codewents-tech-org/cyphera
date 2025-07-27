@@ -33,7 +33,7 @@ add_icon = "assets/Images/Add_new_record.svg"
 submit_icon = "assets/Images/submit_data.svg"
 delete_icon = "assets/Images/delete_data.svg"
 download_icon = "assets/Images/download.svg"
-
+refresh_icon = "assets/Images/Refresh.svg"
 
 #-----------------Home Panel Icons------------------------------------------------#
 home_panel_icon = "assets/Images/Cyphera_Logo.png"

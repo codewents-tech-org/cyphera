@@ -6,9 +6,7 @@ import models.Parameters as P
 import models.helper as helper
 import math
 import controllers.DatabaseCreator as DB
-import Attack_Paths.Technical_Attack_Tree.controllers.technicaltree_node_creator as NC
-import Attack_Paths.controllers.AttackPaths_save_tree as AST
-import Attack_Paths.Technical_Attack_Tree.controllers.technicaltree_customgraphics as CG
+
 from Attack_Paths.controllers.Attackpaths_CustomArrowLine import CustomArrowLine
 import models.ScrollBarStyle as SBS
 import styles.tree_panel_style as tree_panel_style

@@ -72,3 +72,15 @@ def create_toolbar(self):
     small_spacer.setStyleSheet(toolbar_style.toolbar_spacer_style)
     self.toolbar.addWidget(small_spacer)
     
+    self.refresh_button = QToolButton()
+    self.refresh_button.setIcon(QIcon(files.refresh_icon))
+    self.refresh_button.setText(' Refresh')
+    self.refresh_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    self.refresh_button.setStyleSheet(toolbar_style.toolbar_button_style)
+    self.toolbar.addWidget(self.refresh_button)
+
+    # Add a final spacer if needed
+    small_spacer = QWidget()
+    small_spacer.setFixedWidth(10)
+    small_spacer.setStyleSheet(toolbar_style.toolbar_spacer_style)
+    self.toolbar.addWidget(small_spacer)

@@ -147,6 +147,96 @@
           "licensed": true
         }
       ]
+    },
+       {
+      "name": "Attack Paths",
+      "icon": "assets/Images/attack_paths.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Attack Tree",
+          "icon": "assets/Images/attack_tree.svg",
+		  "file": "Attack_Paths.Attack_Tree.views.AttackTree_action",
+		  "class": "Attack_Tree",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Technical Attack Tree",
+          "icon": "assets/Images/technical_attack.svg",
+		  "file": "Attack_Paths.Technical_Attack_Tree.views.technicaltree_action",
+		  "class": "TechnicalTreeModule",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Risk Control Tree",
+          "icon": "assets/Images/risk_control.svg",
+		  "file": "Attack_Paths.RiskControl_Tree.views.RiskControlTree_action",
+		  "class": "RiskControl_Tree",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "Attack Leaves",
+          "icon": "assets/Images/attack_leaves.svg",
+		  "file": "Attack_Paths.Attack_Leaves.views.AttackLeaves_action",
+		  "class": "Attack_Leaves",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Risk Assessment",
+      "icon": "assets/Images/Risk_Assessment_New.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Risk Treatment",
+          "icon": "assets/Images/risk_treatment.svg",
+		  "file": "Risk_Assessment.Risk_Treatment.views.RiskTreatment_action",
+		  "class": "RiskTreatement_Module",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
+    },
+    {
+      "name": "Summary",
+      "icon": "assets/Images/summary.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+        {
+          "name": "Traceability Graph",
+          "icon": "assets/Images/traceability.svg",
+		  "file": "Summary.Traceability_Graph.views.TraceabilityGraph_action",
+		  "class": "TraceabilityGraph_Module",
+          "enabled": true,
+          "licensed": true
+        }
+
+      ]
+    },
+    {
+      "name": "Report",
+      "icon": "assets/Images/report.svg",
+      "enabled": true,
+      "licensed": true,
+      "submodules": [
+
+        {
+          "name": "PEN Test Scenario Report",
+          "icon": "assets/Images/pen_test.svg",
+		  "file": "Reports.PEN_Testcases_Report.views.PENTestcasesReport_action",
+		  "class": "PenTestReportModule",
+          "enabled": true,
+          "licensed": true
+        }
+      ]
     }
 
   ]

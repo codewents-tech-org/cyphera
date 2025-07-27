@@ -19,8 +19,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def find_duplicates():
-    pass
 
 def remove_mindmaps(delete_scope_list):
     # 🧹 Synchronization from scope to mindmap
@@ -40,41 +38,58 @@ def update_mindmaps_name(updated_scope_dict):
         except Exception as e:
             logger.exception(f"❌ Failed to delete ScopeMindmaps for scope_id = {scope_id}: {e}")
 
+from Analysis.controllers.asset_manager import (
+    generate_new_asset_id,
+    add_new_asset,
+    refresh_assets_cache,
+    update_asset,
+    ASSET_CACHE,
+    persist_asset_changes
+)
+
 def synch_mindmap_changes(scope_id, scope_name):
-    logger.info("Updating scope name from mindmap")
+    logger.info("🔄 Updating scope name from mindmap")
     try:
         asset_id = ''
         threat_ids = []
-        update_instance(ScopeHomeMindmap, {'scope_id':scope_id}, {'scope_name':scope_name})
-        scope_instance = get_first_instance(ScopesReference, {'scope_id':scope_id})
+
+        # Update scope name in mindmap and scope reference
+        update_instance(ScopeHomeMindmap, {'scope_id': scope_id}, {'scope_name': scope_name})
+        scope_instance = get_first_instance(ScopesReference, {'scope_id': scope_id})
+
         if scope_instance:
-            update_instance(ScopesReference, {'scope_id':scope_id}, {'scope_name':scope_name})
-            if scope_instance.asset_id and scope_instance.asset_id != '':
-                if scope_instance.threat_id and scope_instance.threat_id != '':
+            update_instance(ScopesReference, {'scope_id': scope_id}, {'scope_name': scope_name})
+
+            if scope_instance.asset_id:
+                asset_id = scope_instance.asset_id
+                if scope_instance.threat_id:
                     mindmap_attacktree_generator(scope_id, scope_name)
                 else:
-                    update_threat_data(scope_id, scope_instance.asset_id)
+                    update_threat_data(scope_id, asset_id)
             else:
+                # No asset linked → create one
                 asset_id = create_asset_record(scope_name)
-                # AS.sync_threats_with_assets()
+                AS.sync_threats_with_assets()
                 update_threat_data(scope_id, asset_id)
 
         else:
+            # No ScopesReference → create new
             instance = ScopesReference(
-                    uuid=str(uuid.uuid4()),
-                    scope_id=scope_id,
-                    scope_name=scope_name,
-                    asset_id='',
-                    threat_id='',
-                    created_by="system"
-                )
+                uuid=str(uuid.uuid4()),
+                scope_id=scope_id,
+                scope_name=scope_name,
+                asset_id='',
+                threat_id='',
+                created_by="system"
+            )
             create_instance(instance)
+
             asset_id = create_asset_record(scope_name)
-            # AS.sync_threats_with_assets()
+            AS.sync_threats_with_assets()
             update_threat_data(scope_id, asset_id)
 
     except Exception as e:
-        print(f"Error occurred: {e}")
+        logger.error(f"Error occurred in synch_mindmap_changes: {e}")
 
 def create_asset_record(scope_name):
     asset_id = f"AST-{get_max_numeric_suffix(Assets, 'asset_id', 'AST')+1}"
@@ -87,6 +102,8 @@ def create_asset_record(scope_name):
             created_by='system'
         )
     create_instance(asset_instance)
+   
+    refresh_assets_cache()
     return asset_id
 
 def update_threat_data(scope_id, asset_id):

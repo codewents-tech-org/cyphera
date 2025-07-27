@@ -4,7 +4,7 @@ import models.helper as helper
 import re
 from Attack_Paths.controllers.attack_tree_AFR_update import AttackTree_AFR_Update
 import Attack_Paths.controllers.Update_Connected_Modules as APST
-from Attack_Paths.controllers.Update_Connected_Modules import Update_Threat_Table, Update_AttackTree_Table, Update_RiskTreatment_Table
+from Attack_Paths.controllers.Update_Connected_Modules import update_threat_table, update_attacktree_table, update_risktreatment_table
 import logging
 logger = logging.getLogger(__name__)
 
@@ -298,9 +298,9 @@ def update_attack_tree_afr(scope_threat_mapping):
     table_update()
 
 def table_update():    
-    APST.Update_Threat_Table()
-    APST.Update_AttackTree_Table()
-    APST.Update_RiskTreatment_Table()
+    APST.update_threat_table()
+    APST.update_attacktree_table()
+    APST.update_risktreatment_table()
 
 
 

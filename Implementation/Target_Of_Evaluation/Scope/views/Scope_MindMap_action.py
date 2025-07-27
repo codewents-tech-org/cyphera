@@ -101,7 +101,12 @@ class MindMapClass(QWidget):
         # Display confirmation dialog
         if self.scope_id:
             Synch.synch_mindmap_changes(self.scope_id, data['node_text'])
-            # Synch.sync_linked_modules()
+
+            # ✅ Refresh scope table in parent (ScopeModule)
+            if hasattr(self.parent, "on_refresh_clicked"):
+                self.parent.on_refresh_clicked()
+                
+            Synch.sync_linked_modules()
         interfaces.unsaved_changes = False
 
     # Refresh mindmap tree

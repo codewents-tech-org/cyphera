@@ -45,3 +45,18 @@ def update_mindmap_tree(scope_id: str, root_data: dict):
     bulk_insert_instances(updated_data_list)
 
 
+def find_duplicates(previous_name, current_name):
+    from controllers.schema_manager import get_instances
+    from controllers.tablemodel import ScopeHomeMindmap
+
+    # If name hasn't changed, no need to check
+    if previous_name.strip().lower() == current_name.strip().lower():
+        return 0
+
+    all_scopes = get_instances(ScopeHomeMindmap, {'is_deleted': 'False'})
+    for scope in all_scopes:
+        name = scope.scope_name.strip().lower()
+        if name == current_name.strip().lower():
+            return 1  # Duplicate found
+
+    return 0  # No duplicate

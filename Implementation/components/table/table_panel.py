@@ -76,7 +76,7 @@ from components.table.table_row_indicator import SidebarWidget as TableRowIndica
 from components.table.tree_row_indicator import SidebarWidget as TreeRowIndicator
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QTableWidgetItem
-
+import components.table.table_row_indicator as TRI
 
 
 logger = logging.getLogger(__name__)
@@ -253,38 +253,22 @@ class TablePanelWrapper(QWidget):
         )
 
     def insert_row(self, data_list: list, row_index=None):
-        """
-        Insert a row with optional row or tree indicator in column 0.
-
-        Args:
-            data_list (list): List of cell values (excluding indicator)
-            row_index (int): Optional index to insert at (default = append)
-        """
         if row_index is None:
             row_index = self.table.rowCount()
             self.table.insertRow(row_index)
         else:
             self.table.insertRow(row_index)
 
-        # Set sidebar indicator if enabled
-        if self.use_row_indicator:
-            if self.use_tree_indicator:
-                indicator = TreeRowIndicator(parent=self, index=row_index, tree_indicator=self.use_tree_indicator)
-                self.table.setCellWidget(row_index, 0, indicator)
-                indicator.tree_button_requested.connect(self.parent_module.open_tree)
-            else:
-                indicator = TreeRowIndicator(parent=self, index=row_index)
-                self.table.setCellWidget(row_index, 0, indicator)
-            # self.table.setCellWidget(row_index, 0, indicator)
-        else:
-            # if no indicator, leave it blank
-            self.table.setItem(row_index, 0, QTableWidgetItem(""))
+        # Set blank cell for col 0 initially
+        self.table.setItem(row_index, 0, QTableWidgetItem(""))
 
+        # Fill the other columns as usual
         for col_index, value in enumerate(data_list):
             item = QTableWidgetItem(str(value))
             self.table.setItem(row_index, col_index + 1, item)
 
         self.ensure_row_selection()
+
 
     def ensure_row_selection(self):
         if hasattr(self, "table") and self.table.rowCount() > 0:

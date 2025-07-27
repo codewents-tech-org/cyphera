@@ -121,6 +121,7 @@ class SecurityClaims_Module(QWidget):
         super().__init__()
         self.initUI()
 
+
     def initUI(self):  
         self.row_selected.connect(self.display_row_data_in_panel)
 
@@ -175,6 +176,7 @@ class SecurityClaims_Module(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.itemChanged.connect(self.set_unsaved_changes)
 
+   
     def ensure_row_selection(self):
         """
         Ensure at least one row is selected in the table when the panel loads.

@@ -5,7 +5,7 @@ import controllers.DatabaseCreator as DB
 
 from Attack_Paths.RiskControl_Tree.controllers.RiskControl_TechnicanTree_Update import riskcontrol_TechnicalTree_Update
 from Attack_Paths.Attack_Tree.controllers.Attack_TechnicanTree_Update import AttackTechnicalTreeUpdater
-from Attack_Paths.controllers.Update_Connected_Modules import Update_Threat_Table, Update_AttackTree_Table, Update_RiskTreatment_Table
+from Attack_Paths.controllers.Update_Connected_Modules import update_threat_table, update_attacktree_table, update_risktreatment_table
 from controllers.schema_manager import get_instances, get_first_instance, create_instance, delete_instance, delete_instances_like
 from controllers.database_tables.attack_paths_tables import AttackTree, RiskControlTree, TechnicalTreeHome 
 import logging
@@ -93,8 +93,8 @@ def sync_removed_technicaltree_from_tree(tree_id):
             # Attack_TechnicalTree_Update(att_tree)
 
     logger.info("Update threat, attack tree table and risk treatment.")
-    Update_Threat_Table()
-    Update_AttackTree_Table()
-    Update_RiskTreatment_Table()
+    update_threat_table()
+    update_attacktree_table()
+    update_risktreatment_table()
 
 

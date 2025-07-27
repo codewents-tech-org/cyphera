@@ -1,4 +1,3 @@
-
 import sys
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSizePolicy, 
                              QMessageBox, QTabWidget, QTableWidget, QToolBar, QToolButton, 
@@ -97,15 +96,18 @@ class ScopeModule(QWidget):
         self.add_button.setEnabled(True)
         self.delete_button.setEnabled(False)
         self.submit_button.setEnabled(False)
+        self.refresh_button.setEnabled(True)
 
         self.add_button.clicked.connect(self.Add_Record)
         self.submit_button.clicked.connect(self.submit_changes)
         self.delete_button.clicked.connect(self.Remove_Record)
+        self.refresh_button.clicked.connect(self.on_refresh_clicked)  # ✅ FIXED
 
         # Table signals
         self.table_data_changed = False
-        self.table.itemChanged.connect(self.table_data_changed_set_flag)
+        self.table.itemChanged.connect(self.scope_table_data_changed_set_flag)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.itemChanged.connect(self.set_unsaved_changes)
         self.update_button_states()
 
@@ -147,12 +149,14 @@ class ScopeModule(QWidget):
         self.tab_container.addTab(self.home_panel, "Home")
         self.tab_container.addTab(self.child_panel, "Child Panel")
         self.previous_text = None
-
+        self.load_data()
         
     def load_data(self):
         if self.data_loaded:
+            print("loading daataa11111111111111..................................")
             self.table_data_changed = False
             return  # 🚫 Prevent reloading if already loaded
+        print("loading daataa.2222222222222222.................................")
         interfaces.previous_tree = None
         self.tab_container.setCurrentIndex(0)
         self.loader = RoundLoader(self, label_text="Loading...")
@@ -173,6 +177,7 @@ class ScopeModule(QWidget):
                 scope.scope_name,
                 scope.comments or ""
             ])
+         
             self.row_uuid_map[row_index] = scope.uuid  # ✅ store UUID separately
 
 
@@ -189,7 +194,10 @@ class ScopeModule(QWidget):
         self.data_loaded = True  # ✅ Mark as loaded
 
     # Highlight selected row in table
-    def on_row_selection_changed(self): TVH.on_row_selection_changed2(self.table)
+    def on_row_selection_changed(self): 
+        print("check on row selction chnage function-----")
+        TVH.on_row_selection_changed2(self.table, self)
+
 
     def Add_Record(self):
         self.table.setFocus()
@@ -203,6 +211,7 @@ class ScopeModule(QWidget):
 
         # Find and open tree for latest added row
         row_after = self.table.rowCount()
+       
         if row_after <= row_before:
             logger.error("No new row added.")
             return
@@ -329,21 +338,11 @@ class ScopeModule(QWidget):
     # Open Risk Control Tree in new tab
     def open_tree(self, index):
         print("am in...", index)
-    # Determine the row where the button was clicked
-        # sender = self.sender()
-        # if sender:
-        #     # Get the parent widget (SidebarWidget) and identify the row in the table
-        #     sidebar_widget = sender.parent()
-        #     for row in range(self.table.rowCount()):
-        #         if self.table.cellWidget(row, 0) == sidebar_widget:  # Assuming SidebarWidget is in column 0
-        #             self.table.selectRow(row)  # Select the row programmatically
-        #             self.index = self.table.model().index(row, 0)  # Update self.index to the correct row
-        #             TVH.on_row_selection_changed2(self.table)
-        #             break
-
-        if index is None:
+        if not index or not index.isValid():
             QMessageBox.warning(None, "Selection Error", "Unable to determine the selected row.")
             return
+        
+        row = index.row()
         open_tree_enable = True
         # Handle unsaved changes before switching to the edit page
         if self.table_data_changed:
@@ -356,15 +355,16 @@ class ScopeModule(QWidget):
 
         # Retrieve item_id and item_name from the selected row
         # row = index.row()
-        item_id = self.table.item(index, 1).text()
-        item_name = self.table.item(index, 2).text()
+        item_id = self.table.item(row, 1).text()
+        item_name = self.table.item(row, 2).text()
+
 
         logger.info(f"Scope Mindmap Editor Opened for {item_id} {item_name}")
 
         # Check if the tab for the item already exists
         tab_index = self.is_tab_available(item_id)
         if tab_index != -1:
-            # Tab exists, switch to it
+            # Tab exists, switch to itsidebar = TRI.SidebarWidget(tree_indicator=True)
             self.inner_tab_widget.setCurrentIndex(tab_index)
             self.active_mindmap_class = self.tab_mindmap_instances[f'{self.inner_tab_widget.tabText(tab_index)}']
             interfaces.previous_tree = self.active_mindmap_class
@@ -451,14 +451,22 @@ class ScopeModule(QWidget):
                 interfaces.previous_module = self
                 # self.load_data()
     
-    def table_data_changed_set_flag(self):
-        self.table_data_changed = True
-        interfaces.unsaved_changes = True
-        self.update_button_states()
-    
+    def scope_table_data_changed_set_flag(self, flag=True):
+        self.data_loaded = flag
+        
     def is_tab_available(self, item_id):
         for index in range(self.inner_tab_widget.count()):
             if self.inner_tab_widget.tabText(index) == f"{item_id}":
                 return index
         return -1  # Tab not found
+    
+    def on_refresh_clicked(self):
+        # if not self.table_data_changed:
+        #     logger.info("🔃 Refresh skipped: No unsaved changes detected.")
+        #     return  # Nothing to refresh
+
+        logger.info("🔃 Refreshing table due to unsaved changes.")
+        self.scope_table_data_changed_set_flag(False)  # Reset change fclslag
+        self.load_data()        # Reload fresh data
+
 

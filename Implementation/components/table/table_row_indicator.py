@@ -1,128 +1,56 @@
-"""
-Module: Table Row Indicator   \n
-File: table_row_indicator.py     \n
-Layer: UI / Widget Component Layer     \n
-Component ID: CO_012     \n
-Requirement IDs: None     \n
-Author: Vishnu Viswanath     \n
-Created On: 2025-05-14     \n
-Version: V 3.0   \n
-
-Purpose:
---------
-Defines the `SidebarWidget` used to display a compact, icon-based button interface  
-on the left edge of each row in a `QTableWidget`. This widget facilitates row-specific actions  
-and enhances interactivity with minimal visual footprint.
-
-Description:
-------------
-Defines a reusable sidebar widget for QTableWidget rows, featuring a compact, icon-based button interface.
-Supports row-specific actions with standardized layout, icon styling, and signal handling for seamless UI interaction.
-
-Responsibilities
-----------------
-- Define a sidebar component that hosts action buttons per table row.
-- Configure layout with margins, icon styles, and size constraints.
-- Handle button click events to support row-specific actions (e.g., deletion).
-
-Signals
--------
-+---------------------+-------------------------+-----------------------------+--------------------------+
-| Trigger             | Signal Name             | Description                 | Payload Format           |
-+=====================+=========================+=============================+==========================+
-| Button Click        | round_button.clicked    | Triggered on button press   | N/A (logging only)       |
-+---------------------+-------------------------+-----------------------------+--------------------------+
-
-Dependencies:
--------------
-- PyQt5 (QtWidgets, QtGui, QtCore)
-- models.Parameters
-- logging
-
-Limitations
------------
-- Currently hardcoded to one action button per row.
-- Row deletion logic is a placeholder — must be implemented externally.
-- Assumes valid icon path from `models.Parameters`.
-
-Improvements
-------------
-- Add hover effects or tooltips for better UX.
-- Support dynamic action binding (edit, duplicate, etc.).
-- Integrate with model/view architecture for clean row operations.
-
-Change History:
----------------
-+----------------+----------------------+-----------------+----------------+
-| Version        | Date                 | Change          | Author         |
-+================+======================+=================+================+
-| v 3.0          | 14/05/2025           | Initial Version |Vishnu Viswanath|
-+----------------+----------------------+-----------------+----------------+
-|                |                      |                 |                |
-+----------------+----------------------+-----------------+----------------+
-|                |                      |                 |                |
-+----------------+----------------------+-----------------+----------------+
-|                |                      |                 |                |
-+----------------+----------------------+-----------------+----------------+
-|                |                      |                 |                |
-+----------------+----------------------+-----------------+----------------+
-"""
-
-
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
+from PyQt5.QtGui import QIcon, QPixmap, QCursor, QPainter, QColor
+from PyQt5.QtCore import QSize, pyqtSignal, Qt
+import models.Parameters as P
 import logging
-
-try:
-    from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton
-    from PyQt5.QtGui import QIcon
-    from PyQt5.QtCore import QSize
-    import models.Parameters as P
-except ImportError as e:
-    print(f"ImportError in table_row_indicator.py: {e}")
 
 logger = logging.getLogger(__name__)
 
-
-
 class SidebarWidget(QWidget):
-    """
-    Sidebar widget that displays a round button for each row in a table.
-    Provides a consistent interface for row-level actions.
+    tree_button_clicked = pyqtSignal(int)  # row index
 
-    Args:
-        parent (QWidget, optional): The parent widget.
-    """
-
-    def __init__(self, parent=None):
+    def __init__(self, row_idx=None, selected=False, tree_indicator=False, parent=None):
         super().__init__(parent)
+        self.row_idx = row_idx
+        self.tree_indicator = tree_indicator
 
-        self.button_size = 16
-        self.button_margin_left = 15
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 0, 0, 0)
 
-        layout = QHBoxLayout()
-        layout.setContentsMargins( self.button_margin_left, 0, 0, 0)
+        # ✅ Row selection indicator (dot)
+        self.dot_label = QLabel()
+        self.update_dot_color(selected)
+        layout.addWidget(self.dot_label)
 
-        self.round_button = QPushButton()
-        try:
-            self.round_button.setIcon(QIcon(P.deselectedrow_icon))
-        except Exception as e:
-            logger.warning(f"Failed to set icon: {e}")
-        self.round_button.setStyleSheet(
-            "QPushButton{background-color: transparent; border:none}"
-        )
-        self.round_button.setIconSize(QSize(self.button_size, self.button_size))
-        self.round_button.setFixedSize(self.button_size, self.button_size)
+        # ✅ Optional Tree icon
+        if self.tree_indicator:
+            self.tree_button = QPushButton()
+            self.tree_button.setIcon(QIcon(P.subtask_icon))
+            self.tree_button.setIconSize(QSize(24, 24))
+            self.tree_button.setCursor(QCursor(Qt.PointingHandCursor))
+            self.tree_button.setStyleSheet("QPushButton { background: transparent; border: none; }")
+            self.tree_button.clicked.connect(self.emit_tree_clicked)
+            layout.addWidget(self.tree_button)
+        else:
+            self.tree_button = None
 
-        layout.addWidget(self.round_button)
         layout.addStretch()
-        self.setLayout(layout)
 
-        self.round_button.clicked.connect(self.delete_row)
+    def update_dot_color(self, selected):
+        """Re-color the same SVG icon dynamically."""
+        color = "#009D9C" if selected else "#FFFFFF00"  # Green when selected
+        pixmap = QPixmap(P.selectedraw_icon).scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(color))
+        painter.end()
+        self.dot_label.setPixmap(pixmap)
 
-    def delete_row(self):
-        """
-        Placeholder for row delete functionality.
+    def set_selected(self, selected):
+        """Call this to dynamically recolor the row indicator."""
+        self.update_dot_color(selected)
 
-        Returns:
-            None
-        """
-        logger.info("Delete placeholder")
+    def emit_tree_clicked(self):
+        print("tree signal...........................")
+        if self.row_idx is not None:
+            self.tree_button_clicked.emit(self.row_idx)

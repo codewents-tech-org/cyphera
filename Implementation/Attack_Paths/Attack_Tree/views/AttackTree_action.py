@@ -30,11 +30,8 @@ import utils.interface_utils as interfaces
 from components.loading_dialog import RoundLoader
 from PyQt5.QtWidgets import QApplication
 import utils.interface_utils as interfaces
-from controllers.schema_manager import get_instances, delete_all_instance, create_instance
-from controllers.database_tables.attack_paths_tables import AttackTree, RiskControlTree, AttackLeafNodes, RiskControlTreeHome, TechnicalTreeHome, AttackTreeHome
-from controllers.database_tables.target_of_evaluation_tables import TOEConfiguration
+
 import logging
-from PyQt5.QtWidgets import QLineEdit
 logger = logging.getLogger(__name__)
 
 
@@ -126,150 +123,81 @@ class Attack_Tree(QWidget):
         self.tab_container.addTab(self.child_panel, "Child Panel")
         self.previous_text = None
 
-    def update_toolbar_tree_label(self, index):
-        """
-        Update the toolbar label for the risk control tree tab, handling autosave, loader display, and instance switching.
-        """
-        from controllers.schema_manager import get_instance
-        from models.risk_control import RiskControlTreeHome  # Adjust the import to match your project
-
-        logger.info("Risk Control Tree Toolbar Label Update Started")
-
-        # Get the selected tab ID
-        tab_id = self.inner_tab_widget.tabText(index)
-
-        # Prevent unnecessary updates when selecting the same tab
-        if (
-            self.inner_tab_widget.currentIndex() == index and
-            self.active_control_ct_class == self.tab_control_instances.get(tab_id)
-        ):
-            logger.info("Same tab selected, skipping update.")
-            return
-
-        # Autosave condition (mirrors Attack Tree behavior)
-        interfaces.previous_module = None
-        if interfaces.autosave_enabled and interfaces.previous_tree and interfaces.unsaved_changes:
-            interfaces.previous_tree.Save_Tree()
-        elif not interfaces.autosave_enabled and interfaces.previous_tree and interfaces.unsaved_changes:
-            reply = QMessageBox.question(
-                None, 'Unsaved Changes',
-                "You have unsaved changes. Do you want to save them before switching?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                interfaces.previous_tree.Save_Tree()
-            elif reply == QMessageBox.No:
-                interfaces.unsaved_changes = False
-
-        # Show loader if needed
-        if not hasattr(self, "round_loader") or self.round_loader is None:
-            self.round_loader = RoundLoader(self, label_text='Loading Tab...')
-            self.round_loader.show()
-            QApplication.processEvents()
-
-        try:
-            # Fetch the risk control tree object via ORM
-            rc_tree_home = get_instance(RiskControlTreeHome, {"rc_id": tab_id})
-            if rc_tree_home:
-                self.tree_toolbar_label.setText(rc_tree_home.name)
-                self.active_control_ct_class = self.tab_control_instances[tab_id]
-                interfaces.previous_tree = self.active_control_ct_class
-
-                if not interfaces.tool_reset_enable:
-                    self.active_control_ct_class.Load_RiskControlTree()
-
-                interfaces.tree_tab_panel['RiskControlTree'] = (self.inner_tab_widget, self.tab_control_instances)
-
-        except Exception as e:
-            logger.error(f"Error updating toolbar tree label: {e}")
-            QMessageBox.critical(None, "Database Error", f"Error loading tree label: {e}")
-
-        finally:
-            # Always close the loader after loading completes
-            if hasattr(self, "round_loader") and self.round_loader:
-                self.round_loader.close()
-                self.round_loader = None
-
-
+    # Load Attack Tree table data from the database
     def load_data(self):
         try:
             interfaces.previous_tree = None
             self.tab_container.setCurrentIndex(0)
-            self.loader = RoundLoader(self, label_text="Loading Attack Tree Data...")
-            self.loader.show()
-            QApplication.processEvents()
-            logger.info('Attack Tree Table Data Loading started')
+            # Show the round loader before loading data
+            # self.loader = RoundLoader(self, label_text="Loading Attack Tree Data...")
+            # self.loader.show()
+            # QApplication.processEvents()  # Ensure UI updates before loading starts
+            # logger.info('Attack Tree Table Data Loading started')
             self.table.setRowCount(0)
-
-            # ORM Fetch
-            rows = get_instances(AttackTreeHome)
-            if not rows:
-                return
-
-            toe_config_rows = get_instances(ToeConfiguration)
-            toe_config_ids = [str(tc.toe_configuration_id) for tc in toe_config_rows]
-            toe_config_options = [f"{tc.toe_configuration_id}::{tc.toe_configuration_name}" for tc in toe_config_rows]
-
-            for row_idx, row in enumerate(rows):
-                self.table.insertRow(row_idx)
-                self.table.setRowHeight(row_idx, 40)
-                sidebar = TRI2.SidebarWidget(parent=self, index=row_idx)
-                self.table.setCellWidget(row_idx, 0, sidebar)
-
-                # id, name, InitialAFR, ResidAFR, toe_configuration, comments
-                id_item = QTableWidgetItem(row.id)
+            # rows = DB.execute_db("SELECT id, name, InitialAFR, ResidAFR, toe_configuration, comments  FROM attack_tree_home")
+            # if not rows:    return
+            
+            # toe_configuration_rows = DB.execute_db("SELECT toe_configuration_id, toe_configuration_name FROM toe_configuration")
+            # toe_config_ids = DB.execute_db("SELECT toe_configuration_id FROM toe_configuration")
+            # toe_config_ids = [str(row[0]) for row in toe_config_ids]
+            # toe_configuration_options = [f"{toec_id}::{toec_name}" for toec_id, toec_name in toe_configuration_rows] 
+            rows = [('TH-1', 'Threat 1', 'High', 'High', '', 'This is a comment'),]
+            for row_idx, (threat_id, name, IAFR, RAFR, toe_configuration, comment) in enumerate(rows):
+                self.table.insertRow(0)
+                self.table.setRowHeight(0, 40)
+                sidebar = TRI2.SidebarWidget(parent = self, index=0, tree_indicator=True)
+                sidebar.tree_button.clicked.connect(self.open_tree)
+                self.table.setCellWidget(0, 0, sidebar)
+                id_item = QTableWidgetItem(threat_id)
                 id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 1, id_item)
-
-                name_item = QTableWidgetItem(row.name)
+                self.table.setItem(0, 1, id_item)
+                name_item = QTableWidgetItem(name)
                 name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 2, name_item)
-
-                IAFR_item = QLineEdit(row.InitialAFR or "")
+                self.table.setItem(0, 2, name_item)
+                IAFR_item = QLineEdit(IAFR)
                 IAFR_item.setReadOnly(True)
-                helper.Apply_AFR_Level_Color(IAFR_item, row.InitialAFR or "")
-                self.table.setCellWidget(row_idx, 3, IAFR_item)
-
-                RAFR_item = QLineEdit(row.ResidAFR or "")
+                helper.Apply_AFR_Level_Color(IAFR_item, IAFR)
+                self.table.setCellWidget(0, 3, IAFR_item)
+                RAFR_item = QLineEdit(RAFR)
                 RAFR_item.setReadOnly(True)
-                helper.Apply_AFR_Level_Color(RAFR_item, row.ResidAFR or "")
-                self.table.setCellWidget(row_idx, 4, RAFR_item)
+                helper.Apply_AFR_Level_Color(RAFR_item, RAFR)
+                self.table.setCellWidget(0, 4, RAFR_item)
 
-                # toe_configuration (multi-select)
-                combo_box = MOS.ReadOnlyMultiSelectComboBox(toe_config_options)
-                selected_toe_configurations = (row.toe_configuration or "").split(", ")
-                new_selected = []
+                # Adding `toe_configuration` column data
+                combo_box = MOS.ReadOnlyMultiSelectComboBox([])
+                selected_toe_configurations = toe_configuration.split(", ")
+                new_selected_toe_configurations = []
                 for data in selected_toe_configurations:
-                    for x in toe_config_options:
+                    for x in []:
                         if f"{data}::" in x and data != '':
-                            new_selected.append(x)
-                combo_box.set_text(new_selected)
-                self.table.setCellWidget(row_idx, 5, combo_box)
+                            new_selected_toe_configurations.append(x)
+                combo_box.set_text(new_selected_toe_configurations)
+                self.table.setCellWidget(0, 5, combo_box)
 
-                comment_item = QTableWidgetItem(row.comments or "")
-                self.table.setItem(row_idx, 6, comment_item)
+                comment_item = QTableWidgetItem(comment)
+                self.table.setItem(0, 6, comment_item)
 
             if self.table.rowCount() > 0:
                 self.table.setCurrentCell(0, 1)
             logger.info('Attack Tree Table Data Loaded successfully')
             self.table_data_changed = False
-            interfaces.unsaved_changes = False
+            interfaces.unsaved_changes = False   
+            # rows = DB.execute_db("SELECT id FROM attack_tree_home")
+            # if rows:
+            #     available_ids = [row[0] for row in rows]
+            #     for i in reversed(range(self.inner_tab_widget.count())):
+            #         if self.inner_tab_widget.tabText(i) not in available_ids:
+            #             self.inner_tab_widget.removeTab(i)
+            # else:
+            #     for i in reversed(range(self.inner_tab_widget.count())):
+            #         self.inner_tab_widget.removeTab(i)
 
-            rows = get_instances(AttackTreeHome)
-            available_ids = [row.id for row in rows] if rows else []
-            for i in reversed(range(self.inner_tab_widget.count())):
-                if self.inner_tab_widget.tabText(i) not in available_ids:
-                    self.inner_tab_widget.removeTab(i)
-            if not rows:
-                for i in reversed(range(self.inner_tab_widget.count())):
-                    self.inner_tab_widget.removeTab(i)
-
-        except Exception as e:
+        except sqlite3.Error as e:
             QMessageBox.critical(None, "Database Error", f"Error loading data: {e}")
 
-        finally:
-            self.loader.close()
-    
+        # finally:
+        #     # Hide the loader after loading completes
+        #     self.loader.close()    
 
     # Highlight selected row in table
     def on_row_selection_changed(self):
@@ -370,104 +298,94 @@ class Attack_Tree(QWidget):
         # Update "Submit" button state
         self.submit_button.setEnabled(row_count > 0)
 
-
-
+    # save Attack Tree table data into the database
     def Submit_Changes(self):
         """
-        Handle the submit action, ensuring pending edits are saved (ORM version).
+        Handle the submit action, ensuring pending edits are saved.
         """
         self.table.setFocus()
         logger.info('Attack Tree Table Data Submission started')
-        self.update_button_states()
-
-        # 1. Clear the table via ORM
-        delete_all_instance(AttackTreeHome, {})  # Delete all rows
-
-        # 2. Loop through table and insert each row as ORM instance
+        self.update_button_states() 
+        DB.execute_db("DELETE FROM attack_tree_home")
         for row in range(self.table.rowCount()):
-            # Build the ORM instance field values
-            field_values = []
+            row_data = []
             for col in range(1, self.table.columnCount()):
-                if col in [3, 4]:
+                if col in [3, 4]:  # Assuming column 2 has TSMultiSelectComboBox
                     line_edit = self.table.cellWidget(row, col)
                     if isinstance(line_edit, QLineEdit):
-                        field_values.append(line_edit.text())
+                        row_data.append(line_edit.text())  
                     else:
-                        field_values.append("")
-                elif col == 5:
+                        row_data.append(" ")
+                elif col == 5:  # Special handling for TSMultiSelectComboBox in column 3
                     combo_box = self.table.cellWidget(row, col)
                     if combo_box is not None:
-                        selected_items = combo_box.selected_items()  # e.g., ['ID1::Name1', 'ID2::Name2']
-                        new_selected_items = [data.split('::')[0] for data in selected_items]
-                        field_values.append(", ".join(new_selected_items))
+                        selected_items = combo_box.selected_items()  # Get selected items from the combo box
+                        new_selected_items = [data.split('::')[0] for data in selected_items]  # Extract part before '::'
+                        row_data.append(", ".join(new_selected_items))  # Join items as a comma-separated string
                     else:
-                        field_values.append("")
+                        row_data.append("")        
                 else:
                     item = self.table.item(row, col)
-                    field_values.append(item.text() if item else '')
-
-            # Map the values to the correct ORM fields (adapt as needed)
-            instance = AttackTreeHome(
-                id=field_values[0],
-                name=field_values[1],
-                InitialAFR=field_values[2],
-                ResidAFR=field_values[3],
-                toe_configuration=field_values[4],
-                comments=field_values[5],
-                # If your model needs created_by etc., add defaults here
-            )
-            create_instance(instance)
-
-        logger.info('Attack Tree Table Data Submitted successfully')
-        self.table_data_changed = False
-        interfaces.unsaved_changes = False
-
-
-    def Submit_Changes(self):
-        """
-        Submit all table data for AttackTreeHome using ORM/schema_manager.
-        """
-        self.table.setFocus()
-        logger.info('Attack Tree Table Data Submission started')
-        self.update_button_states()
-
-        # 1. Delete all previous records (ORM)
-        delete_all_instance(AttackTreeHome, {})
-
-        # 2. Insert current table rows as ORM objects
-        for row in range(self.table.rowCount()):
-            data = []
-            for col in range(1, self.table.columnCount()):
-                # Read-only QLineEdit columns
-                if col in [3, 4]:
-                    w = self.table.cellWidget(row, col)
-                    data.append(w.text() if isinstance(w, QLineEdit) else "")
-                # MultiSelectComboBox column (toe_configuration)
-                elif col == 5:
-                    cb = self.table.cellWidget(row, col)
-                    if cb is not None:
-                        selected = cb.selected_items()
-                        items = [s.split("::")[0] for s in selected]
-                        data.append(", ".join(items))
+                    if item is not None:
+                        row_data.append(item.text())
                     else:
-                        data.append("")
-                # Regular QTableWidgetItem columns
-                else:
-                    it = self.table.item(row, col)
-                    data.append(it.text() if it else "")
-
-            # Unpack data and build ORM instance
-            # id, name, InitialAFR, ResidAFR, toe_configuration, comments
-            instance = AttackTreeHome(
-                id=data[0], name=data[1], InitialAFR=data[2], ResidAFR=data[3],
-                toe_configuration=data[4], comments=data[5]
-            )
-            create_instance(instance)
-
+                        row_data.append('')
+            DB.update_db("INSERT INTO attack_tree_home VALUES (?, ?, ?, ?, ?, ?)", tuple(row_data))
         logger.info('Attack Tree Table Data Submitted successfully')
         self.table_data_changed = False
         interfaces.unsaved_changes = False
+        
+    def update_toolbar_tree_label(self, index):  
+        logger.info('Attack Tree Toolbar Label Update started') 
+        tab_id = self.inner_tab_widget.tabText(index)
+        # **Prevent unnecessary updates when selecting the same tab**
+        if self.inner_tab_widget.currentIndex() == index and self.active_threat_at_class == self.tab_threat_instances.get(tab_id):
+            logger.info("Same tab selected, skipping update.")
+            return  # ✅ Exit early to prevent autosave popup from triggering
+        
+        # **Autosave Condition (Same as Attack Tree)**
+        interfaces.previous_module = None
+        if interfaces.autosave_enabled and interfaces.previous_tree and interfaces.unsaved_changes:
+            interfaces.previous_tree.Save_Tree()  # Corrected function name
+        elif not interfaces.autosave_enabled and interfaces.previous_tree and interfaces.unsaved_changes:
+            # Show a popup to confirm if the user wants to discard changes
+            reply = QMessageBox.question(
+                None, 'Unsaved Changes',
+                "You have unsaved changes. Do you want to save them before switching?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
 
+            # Handle user's choice
+            if reply == QMessageBox.Yes:
+                interfaces.previous_tree.Save_Tree()  # Corrected function name
+            elif reply == QMessageBox.No:
+                interfaces.unsaved_changes = False  
+        
+        # **Skip creating a new loader if open_tree() is running**
+        if not hasattr(self, "round_loader") or self.round_loader is None:
+            self.round_loader = RoundLoader(self, label_text='Loading Tab...')
+            self.round_loader.show()
+            QApplication.processEvents()
+
+        try:
+            # rows = DB.execute_db_query("SELECT name FROM attack_tree_home WHERE id = ?", (f'{self.inner_tab_widget.tabText(index)}',))
+            if True:
+                self.tree_toolbar_label.setText('TH-1') 
+                self.active_threat_at_class = self.tab_threat_instances[f'{self.inner_tab_widget.tabText(index)}']
+                interfaces.previous_tree = self.active_threat_at_class
+                if interfaces.tool_reset_enable != True:
+                    self.active_threat_at_class.Load_AttackTree()  # Call loadtree() on the active class
+                interfaces.tree_tab_panel['AttackTree'] = (self.inner_tab_widget, self.tab_threat_instances)
+            
+        except Exception as e:
+            logger.error(f"Error loading tab: {e}")
+
+        finally:
+            # **Close the loader only if it's not already handled**
+            if self.round_loader:
+                self.round_loader.accept()
+                self.round_loader = None
+      
     # Common Save Button Handler
     def on_save_button_click(self):
         logger.info("Attack Tree Save Button Clicked")

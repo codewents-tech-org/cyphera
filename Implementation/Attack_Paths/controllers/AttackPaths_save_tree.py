@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import QComboBox, QMessageBox, QComboBox
 import controllers.DatabaseCreator as DB
 # from Attack_Paths.controllers.Update_AllTrees_SubTrees import Update_AttackTree_ExistingControlTree, Update_AttackTree_ExistingTechnicalTree, Update_ControlTree_ExistingTechnicalTree
-from Attack_Paths.controllers.Update_Connected_Modules import Update_Threat_Table, Update_TechnicalTree_Table, Update_RiskControlTree_Table, Update_AttackTree_Table, Update_RiskTreatment_Table
+from Attack_Paths.controllers.Update_Connected_Modules import update_threat_table, update_technicaltree_table, update_riskcontroltree_table, update_attacktree_table, update_risktreatment_table
 
 import logging
 logger = logging.getLogger(__name__)
@@ -53,11 +53,11 @@ def Save_TechnicalTree(tree, tree_id, nodes):
         logger.info(f"Updating Technical tree in Attack tree")
         Update_AttackTree_ExistingTechnicalTree(tree_id)
         logger.info(f"Updating Threat table")
-        Update_Threat_Table()
+        update_threat_table()
         logger.info(f"Updating Attack tree table")
-        Update_AttackTree_Table()
+        update_attacktree_table()
         logger.info(f"Updating Risk treatment table")
-        Update_RiskTreatment_Table()
+        update_risktreatment_table()
         # QMessageBox.information(None, "Save", f"{'technical_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:
@@ -115,13 +115,13 @@ def Save_RiskControlTree(tree, tree_id, nodes):
         logger.info(f"Updating Risk Control Tree in Attack tree")
         Update_AttackTree_ExistingControlTree(tree_id)
         logger.info(f"Updating Technical tree table")
-        Update_TechnicalTree_Table()
+        update_technicaltree_table()
         logger.info(f"Updating Threat table")
-        Update_Threat_Table()
+        update_threat_table()
         logger.info(f"Updating Attack tree table")
-        Update_AttackTree_Table()
+        update_attacktree_table()
         logger.info(f"Updating Risk treatment table")
-        Update_RiskTreatment_Table()
+        update_risktreatment_table()
         # QMessageBox.information(None, "Save", f"{'riskcontrol_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:
@@ -195,15 +195,15 @@ def Save_AttackTree(tree, tree_id, nodes):
         logger.info(f"Updating all tree leaf data and attack leaves table")
         tree.Update_Leaf_Data()
         logger.info(f"Updating Risk Control Tree table")
-        Update_RiskControlTree_Table()
+        update_riskcontroltree_table()
         logger.info(f"Updating Technical tree table")
-        Update_TechnicalTree_Table()
+        update_technicaltree_table()
         logger.info(f"Updating Threat table")
-        Update_Threat_Table()
+        update_threat_table()
         logger.info(f"Updating attack tree table")
-        Update_AttackTree_Table()
+        update_attacktree_table()
         logger.info(f"Updating Risk treatment table")
-        Update_RiskTreatment_Table()
+        update_risktreatment_table()
         # QMessageBox.information(None, "Save", f"{'attack_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:

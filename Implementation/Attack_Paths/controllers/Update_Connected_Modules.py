@@ -1,166 +1,213 @@
 
 import sys
+from controllers.database_tables.analysis_tables import Threats
+from controllers.database_tables.risk_assessment_tables import RiskData
+from controllers.database_tables.security_measurment_tables import SecurityControls
+from  controllers.database_tables.attack_paths_tables import AttackTree, AttackTreeHome, NodeType, RiskControlTree, RiskControlTreeHome, TechnicalTreeHome
+from  controllers.schema_manager import get_first_instance, get_instances, get_instances_like, update_instance
 import controllers.DatabaseCreator as DB
 import models.helper as helper
 
 import logging
 logger = logging.getLogger(__name__)
+def update_threat_table():
+    # 1. Get all Threat records
+    threats = get_instances(Threats)
+    for threat in threats:
+        threat_id = threat.threat_id
 
-def Update_Threat_Table():
-    threat_rows = DB.execute_db("SELECT threat_id FROM threat")
-    threat_list = []
-    for row in threat_rows: threat_list.append(row[0])
-    for threat in threat_list:
-        attacktree_rows = DB.execute_db(f"SELECT Node_Type, AF_Text, RF_Text FROM attack_tree WHERE Node_ID like '{threat}_node_0'")
-        attacktree_head = []
-        for row in attacktree_rows: 
-            if row[0] == 'head': attacktree_head = row
-        # print(attacktree_head)
-        # Fetch the specific row with the matching threat_id
-        row = DB.execute_db_query(f"SELECT * FROM threat WHERE threat_id = ?", (threat,))
-        if row:  # Ensure the row exists
-            row_data = list(row[0])  # Convert tuple to list to modify values
-            if attacktree_head:
-                row_data[5] = attacktree_head[1]  # Update the AF level
-                row_data[6] = attacktree_head[2]  # Update the RF level
-            else:
-                row_data[5] = ''  # Update the AF level
-                row_data[6] = ''  # Update the RF level
-            # print(row_data)
-            # Unpack the updated row data
-            id, name, damage_scenarios,misuse_cases, toe_configuration, InitialAFR, ResidAFR, asset, security_properties, reasoning, comments = row_data
-            # Use UPDATE query instead of INSERT OR REPLACE for only updating the necessary fields
-            DB.update_db("""UPDATE threat SET InitialAFR = ?, ResidAFR = ? WHERE threat_id = ?""", (InitialAFR, ResidAFR, id))
+        # 2. Find AttackTree HEAD node for this threat
+        attacktree_head = get_first_instance(
+            AttackTree,
+            filters={
+                "node_id": f"{threat_id}_node_0",
+                "node_type": NodeType.HEAD
+            }
+        )
 
-def Update_AttackTree_Table():
-    threat_rows = DB.execute_db("SELECT id FROM attack_tree_home")
-    threat_list = []
-    for row in threat_rows: threat_list.append(row[0])
-    for threat in threat_list:
-        attacktree_rows = DB.execute_db(f"SELECT Node_Type, AF_Text, RF_Text FROM attack_tree WHERE Node_ID like '{threat}_node_0'")
-        attacktree_head = []
-        for row in attacktree_rows: 
-            if row[0] == 'head': attacktree_head = row
-        # Fetch the specific row with the matching threat_id
-        row = DB.execute_db_query(f"SELECT * FROM attack_tree_home WHERE id = ?", (threat,))
-        if row:  # Ensure the row exists
-            row_data = list(row[0])  # Convert tuple to list to modify values
-            if attacktree_head:
-                row_data[2] = attacktree_head[1]  # Update the AF level
-                row_data[3] = attacktree_head[2]  # Update the RF level
-            else:
-                row_data[2] = ''  # Update the AF level
-                row_data[3] = ''  # Update the RF level
-            
-            # Unpack the updated row data
-            id, name, InitialAFR, ResidAFR, toe_configuration, comments = row_data
-            # Use UPDATE query instead of INSERT OR REPLACE for only updating the necessary fields
-            DB.update_db("""UPDATE attack_tree_home SET InitialAFR = ?, ResidAFR = ? WHERE id = ?""", (InitialAFR, ResidAFR, id))
+        # 3. Get AF and RF values, or set blank if not found
+        if attacktree_head:
+            initial_afr = attacktree_head.af_value
+            resid_afr = attacktree_head.rf_value
+        else:
+            initial_afr = ""
+            resid_afr = ""
 
-def Update_RiskControlTree_Table():
-    control_rows = DB.execute_db("SELECT id, name FROM security_controls")
-    control_map = {}
-    for control in control_rows: control_map[control[0]] = control[1]
-    control_list = []
-    for row in control_rows: control_list.append(row[0])
-    for control in control_list:
-        text = f"{control} Risk_Control - {control_map[control]}"
-        attacktree_rows = DB.execute_db(f"SELECT Node_ID FROM attack_tree WHERE Text like '{text}'")
-        attacktree_control_map = ''
-        for row in attacktree_rows: 
-            if attacktree_control_map == '': attacktree_control_map = str(row[0].strip().split('_')[0])
-            else: attacktree_control_map += ', ' + str(row[0].strip().split('_')[0])
-        # Fetch the specific row with the matching threat_id
-        row = DB.execute_db_query(f"SELECT * FROM riskcontrol_tree_home WHERE id = ?", (control,))
-        if row:  # Ensure the row exists
-            row_data = list(row[0])  # Convert tuple to list to modify values
-            if attacktree_control_map:
-                row_data[2] = attacktree_control_map
-            else:
-                row_data[2] = attacktree_control_map
-            
-            # Unpack the updated row data
-            id, name, mitigates, assumptions, comment = row_data
-            # Use UPDATE query instead of INSERT OR REPLACE for only updating the necessary fields
-            DB.update_db("""UPDATE riskcontrol_tree_home SET mitigates = ? WHERE id = ?""", (mitigates, id))
+        # 4. Update threat table with these values
+        update_instance(
+            Threats,
+            {"threat_id": threat_id},
+            {
+                "InitialAFR": initial_afr,
+                "ResidAFR": resid_afr
+            }
+        )
 
-def Update_TechnicalTree_Table():
-    technical_rows = DB.execute_db("SELECT id, name FROM technical_tree_home")
-    technical_map = {}
-    for technical in technical_rows: technical_map[technical[0]] = technical[1] if technical[1] else technical[0]
-    technical_list = []
-    for row in technical_rows: technical_list.append(row[0])
-    for technical in technical_list:
-        text = f"{technical} {technical_map[technical]}"
-        
-        attacktree_rows = DB.execute_db(f"SELECT Node_ID FROM attack_tree WHERE Text like '{text}'")
-        attacktree_technical_map = set()
-        attacktree_technical_map_str  = ''
-        for row in attacktree_rows: 
-            # if attacktree_technical_map == '': attacktree_technical_map = str(row[0].strip().split('_')[0])
-            # else: attacktree_technical_map += ', ' + str(row[0].strip().split('_')[0])
-            node_id_prefix = row[0].strip().split('_')[0] if '_' in row[0] else row[0].strip()
-            attacktree_technical_map.add(node_id_prefix)  # Ensures uniqueness
-        attacktree_technical_map_str = ', '.join(sorted(attacktree_technical_map))
-        
-        RiskControlTree_rows = DB.execute_db(f"SELECT Node_ID FROM riskcontrol_tree WHERE Text like '{text}'")
-        RiskControlTree_technical_map = set()
-        RiskControlTree_technical_map_str = ''
-        for row in RiskControlTree_rows: 
-            # if RiskControlTree_technical_map == '': RiskControlTree_technical_map = str(row[0].strip().split('_')[0])
-            # else: RiskControlTree_technical_map += ', ' + str(row[0].strip().split('_')[0])
-            node_id_prefix = row[0].strip().split('_')[0] if '_' in row[0] else row[0].strip()
-            RiskControlTree_technical_map.add(node_id_prefix)  # Ensures uniqueness
-        RiskControlTree_technical_map_str = ', '.join(sorted(RiskControlTree_technical_map))
-        
-        # Fetch the specific row with the matching threat_id
-        row = DB.execute_db_query(f"SELECT * FROM technical_tree_home WHERE id = ?", (technical,))
-        if row:  # Ensure the row exists
-            row_data = list(row[0])  # Convert tuple to list to modify values
-            if RiskControlTree_technical_map_str:
-                row_data[3] = RiskControlTree_technical_map_str
-            else:
-                row_data[3] = RiskControlTree_technical_map_str
-            if attacktree_technical_map_str:
-                row_data[2] = attacktree_technical_map_str 
-            else:
-                row_data[2] = attacktree_technical_map_str 
-            
-            # Unpack the updated row data
-            id, name, used_in_threat, used_in_riskcontrol, toe_configuration, assumptions, comment = row_data
-            # Use UPDATE query instead of INSERT OR REPLACE for only updating the necessary fields
-            DB.update_db("""UPDATE technical_tree_home SET used_in_threat = ?, used_in_riskcontrol = ? WHERE id = ?""", (used_in_threat, used_in_riskcontrol, id))
 
-def Update_RiskTreatment_Table():
-    # Fetch the specific row with the matching threat_id
-    attacktree_rows = DB.execute_db(f'SELECT Node_ID, Text FROM attack_tree where Node_Type like "riskcontrol head"')
-    attacktree_linked_controls_CT = {}
-    for node_id, text in attacktree_rows:
-        threat = node_id.split('_')[0]
-        control = text.split(' ')[0]
-        if control not in attacktree_linked_controls_CT.keys(): attacktree_linked_controls_CT[control] = threat
-        else : attacktree_linked_controls_CT[control] += f", {threat}"
+def update_attacktree_table():
+    # Get all attack_tree_home records
+    attack_tree_homes = get_instances(AttackTreeHome)
+    for home in attack_tree_homes:
+        threat_id = home.id
+
+        # Find AttackTree node where node_id = '{threat_id}_node_0' and node_type == NodeType.HEAD
+        attacktree_head = get_first_instance(
+            AttackTree,
+            filters={
+                "node_id": f"{threat_id}_node_0",
+                "node_type": NodeType.HEAD
+            }
+        )
+
+        update_data = {
+            "initial_afr": attacktree_head.af_value if attacktree_head else "",
+            "resid_afr": attacktree_head.rf_value if attacktree_head else ""
+        }
+
+        update_instance(
+            AttackTreeHome,
+            {"id": threat_id},
+            update_data
+        )
+
+
+def update_riskcontroltree_table():
+    # Step 1: Get all controls and build control_map: {scc_id: name}
+    controls = get_instances(SecurityControls)
+    control_map = {control.scc_id: control.name for control in controls}
+    control_list = list(control_map.keys())
     
-    attacktree_linked_controls_RT = {}
-    for node_id, text in attacktree_rows:
-        threat = node_id.split('_')[0]
-        control = text.split(' ')[0]
-        if threat not in attacktree_linked_controls_RT.keys(): attacktree_linked_controls_RT[threat] = control
-        else : attacktree_linked_controls_RT[threat] += f", {control}"
-    # print(attacktree_linked_controls_RT)
-    rows = DB.execute_db(f"SELECT * FROM RiskData")
-    for row in rows:
-        row_data = list(row)
-        if row[3].split(' ')[0] in attacktree_linked_controls_RT.keys():
-            row_data[12] = attacktree_linked_controls_RT[row[3].split(' ')[0]]
-        else : row_data[12] = ''
-        id, damage, impact, threat, init_AFR_level, init_AFR_value, resid_AFR_level, resid_AFR_value, toe_configuration, risk_treatment, security_claims, security_goals, mitigated_by = row_data
-        threat_id = threat.split(' - ')[0]
-        AFR_level_data = DB.execute_db_query(f"SELECT InitialAFR, ResidAFR FROM attack_tree_home WHERE id = ?", (threat_id,))
-        if AFR_level_data:
-            init_AFR_level = AFR_level_data[0][0]
-            init_AFR_value = helper.risk_map.get((impact, init_AFR_level)) if (init_AFR_level in helper.AFR_Levels and impact in helper.DS_impact_menu) else ''
-            resid_AFR_level = AFR_level_data[0][1]
-            resid_AFR_value = helper.risk_map.get((impact, resid_AFR_level)) if (resid_AFR_level in helper.AFR_Levels and impact in helper.DS_impact_menu) else ''
-            DB.update_db("""UPDATE RiskData SET init_AFR_level=?, init_AFR_value=?, resid_AFR_level=?, resid_AFR_value=?, mitigated_by = ? WHERE threat = ? AND damage = ?""", (init_AFR_level, init_AFR_value, resid_AFR_level, resid_AFR_value, mitigated_by, threat, damage))
+    # Step 2: For each control, build the mitigates string based on matching AttackTree node_id
+    for control_id in control_list:
+        # Your new text-matching logic is node_id startswith control_id (no "Text" column anymore)
+        related_attacktree_nodes = [
+            node for node in get_instances(AttackTree)
+            if node.node_id.startswith(f"{control_id}_node")
+        ]
 
+        # Build mitigates string (unique prefix up to first underscore)
+        mitigates_set = set()
+        for node in related_attacktree_nodes:
+            node_id_prefix = node.node_id.strip().split('_')[0] if '_' in node.node_id else node.node_id.strip()
+            mitigates_set.add(node_id_prefix)
+        mitigates_str = ', '.join(sorted(mitigates_set))
+
+        # Update RiskControlTreeHome.mitigates for this control
+        update_instance(
+            RiskControlTreeHome,
+            {"id": control_id},
+            {"mitigates": mitigates_str}
+        )
+
+def update_technicaltree_table():
+    # Step 1: Build technical_map: {id: name}
+    technical_rows = get_instances(TechnicalTreeHome)
+    technical_map = {row.id: row.name if row.name else row.id for row in technical_rows}
+    technical_list = list(technical_map.keys())
+
+    for technical_id in technical_list:
+        text = f"{technical_id} {technical_map[technical_id]}"
+
+        # (A) Find AttackTree nodes whose node_id starts with the technical id
+        attacktree_nodes = [
+            node for node in get_instances(AttackTree)
+            if node.node_id.startswith(f"{technical_id}_node")
+        ]
+        attacktree_technical_map = set()
+        for node in attacktree_nodes:
+            node_id_prefix = node.node_id.strip().split('_')[0] if '_' in node.node_id else node.node_id.strip()
+            attacktree_technical_map.add(node_id_prefix)
+        attacktree_technical_map_str = ', '.join(sorted(attacktree_technical_map))
+
+        # (B) Find RiskControlTree nodes whose node_id starts with the technical id
+        riskcontroltree_nodes = [
+            node for node in get_instances(RiskControlTree)
+            if node.node_id.startswith(f"{technical_id}_node")
+        ]
+        riskcontroltree_technical_map = set()
+        for node in riskcontroltree_nodes:
+            node_id_prefix = node.node_id.strip().split('_')[0] if '_' in node.node_id else node.node_id.strip()
+            riskcontroltree_technical_map.add(node_id_prefix)
+        riskcontroltree_technical_map_str = ', '.join(sorted(riskcontroltree_technical_map))
+
+        # (C) Update TechnicalTreeHome.used_in_threat and used_in_riskcontrol
+        update_instance(
+            TechnicalTreeHome,
+            {"id": technical_id},
+            {
+                "used_in_threat": attacktree_technical_map_str,
+                "used_in_riskcontrol": riskcontroltree_technical_map_str
+            }
+        )
+
+
+def update_risktreatment_table():
+    # 1. Fetch all AttackTree nodes with node_type = "riskcontrol head"
+    attacktree_nodes = get_instances(
+        AttackTree,
+        filters={"node_type": NodeType.RCT_HEAD}
+    )
+
+    # 2. Build control <-> threat mappings
+    attacktree_linked_controls_CT = {}  # Control to Threat(s)
+    attacktree_linked_controls_RT = {}  # Threat to Control(s)
+
+    for node in attacktree_nodes:
+        node_id = node.node_id               # e.g. Ctrl-3_node_0
+        threat = node_id.split('_')[0]       # e.g. Ctrl-3
+        control = threat                     # in your old code, control came from Text, now node_id prefix
+
+        # CT: control → threat(s)
+        if control not in attacktree_linked_controls_CT:
+            attacktree_linked_controls_CT[control] = threat
+        else:
+            attacktree_linked_controls_CT[control] += f", {threat}"
+
+        # RT: threat → control(s)
+        if threat not in attacktree_linked_controls_RT:
+            attacktree_linked_controls_RT[threat] = control
+        else:
+            attacktree_linked_controls_RT[threat] += f", {control}"
+
+    # 3. Update all RiskData rows
+    risks = get_instances(RiskData)
+    for risk in risks:
+        # Map: risk.threat_id (in new model) == threat_id ('TH-21', etc)
+        threat_id_key = risk.threat_id
+        mitigated_by = attacktree_linked_controls_RT.get(threat_id_key, "")
+
+        # Get AFR levels from AttackTreeHome
+        afr_home = get_first_instance(AttackTreeHome, filters={"id": threat_id_key})
+        if afr_home:
+            init_afr_level = afr_home.initial_afr
+            resid_afr_level = afr_home.resid_afr
+
+            init_afr_value = (
+                helper.risk_map.get((risk.impact, init_afr_level))
+                if (hasattr(helper, "risk_map") and hasattr(helper, "AFR_Levels") and hasattr(helper, "DS_impact_menu")
+                    and init_afr_level in helper.AFR_Levels and risk.impact in helper.DS_impact_menu)
+                else ""
+            )
+            resid_afr_value = (
+                helper.risk_map.get((risk.impact, resid_afr_level))
+                if (hasattr(helper, "risk_map") and hasattr(helper, "AFR_Levels") and hasattr(helper, "DS_impact_menu")
+                    and resid_afr_level in helper.AFR_Levels and risk.impact in helper.DS_impact_menu)
+                else ""
+            )
+        else:
+            init_afr_level = ""
+            resid_afr_level = ""
+            init_afr_value = ""
+            resid_afr_value = ""
+
+        update_instance(
+            RiskData,
+            {"uuid": risk.uuid},  # or {"rd_id": risk.rd_id} if that's your unique app-level ID
+            {
+                "init_afr_level": init_afr_level,
+                "init_afr_value": init_afr_value,
+                "resid_afr_level": resid_afr_level,
+                "resid_afr_value": resid_afr_value,
+                "mitigated_by": mitigated_by,
+            }
+        )

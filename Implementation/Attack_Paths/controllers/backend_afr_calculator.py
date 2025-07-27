@@ -1,7 +1,7 @@
 
 
-
-
+from Attack_Paths.Attack_Tree.controllers.database_to_at import build_at_tree_json
+from Attack_Paths.RiskControl_Tree.controllers.database_to_rct import build_rc_tree_json
 from Attack_Paths.Technical_Attack_Tree.controllers.database_to_tat import build_ta_tree_json
 from controllers.tablemodel import NodeType, ReferenceTrees, AttackTree, TechnicalAttackTree, RiskControlTree
 from Attack_Paths.models.afr_calculation import calculate_afr_values

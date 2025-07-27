@@ -17,9 +17,10 @@ def load_all_technical_trees():
     print("🔄 Loading Technical Trees from DB...")
     TECHNICAL_TREE_CACHE.clear()
 
-    records = get_instances(TechnicalTreeHome, {'is_deleted': False})
-    if not records or isinstance(records, bool):
-        logger.error("❌ Failed to load Technical Trees")
+    try:
+        records = get_instances(TechnicalTreeHome, {'is_deleted': False}) or []
+    except Exception as e:
+        logger.error(f"❌ Failed to load Technical Trees (DB error): {e}")
         return []
 
     for rec in records:
@@ -32,10 +33,11 @@ def load_all_technical_trees():
     return [entry['record'] for entry in TECHNICAL_TREE_CACHE.values()]
 
 
+
 def create_technical_tree(tt_id, name):
     tree = TechnicalTreeHome(
         uuid=str(uuid.uuid4()),
-        technical_tree_id=tt_id,
+        id=tt_id,
         name=name,
         created_by="system",
         updated_by="system",
@@ -92,7 +94,7 @@ def persist_technical_tree_changes():
         else:
             updates.append({
                 'uuid': uuid,
-                'technical_tree_id': obj.technical_tree_id,
+                'id': obj.id,
                 'name': obj.name,
                 'comment': obj.comment,
                 'updated_by': obj.updated_by,
@@ -109,7 +111,7 @@ def persist_technical_tree_changes():
 # ========================== UI Business Logic ==========================
 
 def create_technical_tree_and_insert_row(self):
-    tt_id = generate_new_technical_tree_id()
+    tt_id = generate_new_id()
     name = f"Technical Tree {tt_id.split('-')[-1]}"
     tree = create_technical_tree(tt_id, name)
 
@@ -119,7 +121,7 @@ def create_technical_tree_and_insert_row(self):
 
     row_index = self.table.rowCount()
     self.table_wrapper.insert_row([
-        tree.technical_tree_id,
+        tree.id,
         tree.name,
         tree.comment or ""
     ])
@@ -130,11 +132,11 @@ def create_technical_tree_and_insert_row(self):
     self.table.selectRow(row_index)
 
 
-def generate_new_technical_tree_id():
+def generate_new_id():
     global last_tt_number
 
     if last_tt_number is None:
-        last_tt_number = get_max_numeric_suffix(TechnicalTreeHome, "technical_tree_id", prefix="TECHTREE")
+        last_tt_number = get_max_numeric_suffix(TechnicalTreeHome, "id", prefix="TECHTREE")
         if last_tt_number == 0:
             last_tt_number = 0
 
