@@ -91,6 +91,7 @@ from Security_Measurement.Security_Claims.views.securityclaims_toolbar_panel imp
 from Security_Measurement.Security_Claims.config.security_claims_config import PROPERTY_CONFIG, SAVE_BUTTON
 from components.propertypanel.property_input_components import PropertyInputFactory
 from styles.property_panel_style import property_save_button_style
+from models.unique_name_action import find_duplicates as unique_find_duplicates
 from PyQt5.QtCore import pyqtSignal, Qt
 import controllers.TableValueHighlight as TVH
 import controllers.DatabaseCreator as DB
@@ -114,19 +115,20 @@ logger = logging.getLogger(__name__)
 
 class SecurityClaims_Module(QWidget):
     create_property_panel_signal = pyqtSignal()
-    create_property_layout_signal = pyqtSignal()
     property_save_clicked = pyqtSignal(dict)
     row_selected = pyqtSignal(dict)
+    
     def __init__(self):
         super().__init__()
         self.initUI()
+        self.previous_text = ""
 
-    def initUI(self):  
+    def initUI(self):
         self.row_selected.connect(self.display_row_data_in_panel)
-
+        
         self.property_panel_manager = property_panel_layout.PropertyPanelManager(self)
         self.property_panel_manager.create_property_panel()
-
+        
         self.toggle_button = self.property_panel_manager.toggle_button
         self.property_panel = self.property_panel_manager.property_panel
         self.property_layout = self.property_panel_manager.property_layout
@@ -161,178 +163,226 @@ class SecurityClaims_Module(QWidget):
         self.save_button.setEnabled(True)
 
         self.add_button.clicked.connect(self.add_new_entry)
-        print("[DEBUG] Connecting delete_button")
         self.delete_button.clicked.connect(self.delete_entry)
         self.submit_button.clicked.connect(self.submit_changes)
         self.save_button.clicked.connect(self.submit_changes)
 
-        self.existing_entries = set()
         self.row_uuid_map = {}
+        self.row_sidebar_widgets = set()
 
         self.table.itemChanged.connect(self.update_cell_to_cache)
         self.table.itemDoubleClicked.connect(self.store_selected_entry)
         self.table.itemChanged.connect(self.find_duplicates)
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.itemChanged.connect(self.set_unsaved_changes)
-
-    def ensure_row_selection(self):
-        """
-        Ensure at least one row is selected in the table when the panel loads.
-        """
-        if hasattr(self, 'table_widget') and self.table_widget:
-            if self.table_widget.rowCount() > 0 and not self.table_widget.selectedItems():
-                self.table_widget.selectRow(0)    
-
+        
     def on_row_selection_changed(self, selected, deselected):
+        TVH.on_row_selection_changed(self.table)
         if self.table.currentRow() >= 0:
-            self.display_row_data_in_panel(None)
-        self.update_button_states()
-
+            row = self.table.currentRow()
+            data = {
+                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
+                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
+                "Assumptions": ", ".join(self.table.cellWidget(row, 3).selected_items()) if self.table.cellWidget(row, 3) else "",
+                "Responsible": ", ".join(self.table.cellWidget(row, 4).selected_items()) if self.table.cellWidget(row, 4) else "",
+                "TOE Configuration": ", ".join(self.table.cellWidget(row, 5).selected_items()) if self.table.cellWidget(row, 5) else "",
+                "Description": self.table.item(row, 6).text() if self.table.item(row, 6) else "",
+                "Comments": self.table.item(row, 7).text() if self.table.item(row, 7) else ""
+            }
+            payload = {
+                "sender": "Table",
+                "event": "row_selected",
+                "data": data
+            }
+            self.row_selected.emit(payload)
 
     def load_data(self):
-        """
-        Loads all data for the Security Claims panel using the centralized manager and populates
-        the table and property panel without hardcoded layout dimensions.
-        """
-
-        # Show loading dialog
-        self.loader = RoundLoader(self, label_text="Loading Security Claims Data...")
+        self.loader = RoundLoader(self, label_text="Loading Security Claims...")
+        self.loader.show()
         QApplication.processEvents()
 
         try:
             self.table.itemChanged.disconnect(self.find_duplicates)
-        except TypeError:
+        except Exception:
             pass
 
-        # 🔁 Load cached security claims
-        cached_claims = SCM.load_all_security_claims()
+        # Load cached security claims from the manager
+        claims = SCM.load_all_security_claims()
 
-        # ✅ Load Assumptions
-        assumptions_rows = get_instances(Assumptions, {})
-        assumptions_options = [
+        # 🟩 Prepare Assumption options
+        assumption_rows = get_instances(Assumptions, {})
+        self.formatted_assumptions = [
             f"{a.assumption_id}::{a.assumptions}"
-            for a in assumptions_rows if a.assumption_id and a.assumptions
+            for a in assumption_rows if a.assumption_id and a.assumptions
         ]
-        self.security_claim_assumptions_input.additem(assumptions_options)
-        self.security_claim_assumptions_input.set_text('')
-        self.formatted_assumptions = assumptions_options
+        self.security_claim_assumptions_input.additem(self.formatted_assumptions)
 
-        # ✅ Load Responsible values
+        # 🟩 Prepare Responsible options
         responsible_set = set()
-        for claim in cached_claims:
+        for claim in claims:
             if claim.responsible:
-                responsible_set.update(val.strip() for val in claim.responsible.split(',') if val.strip())
-        responsible_options = list(responsible_set) or [ "Customer", "Supplier"]
+                responsible_set.update([val.strip() for val in claim.responsible.split(",") if val.strip()])
+        responsible_options = list(responsible_set) or ["Customer", "Supplier"]
         self.security_claim_responsible_input.additem(responsible_options)
-        self.security_claim_responsible_input.set_text('')
 
-        # ✅ Load TOE Configuration
+        # 🟩 Prepare TOE Configuration options
         toe_rows = get_instances(TOEConfiguration, {})
-        toe_configuration_options = [
+        self.formatted_toe_configuration = [
             f"{t.toe_configuration_id}::{t.toe_configuration_name}"
             for t in toe_rows if t.toe_configuration_id and t.toe_configuration_name
         ]
-        self.security_claim_toe_configuration_input.additem(toe_configuration_options)
-        self.security_claim_toe_configuration_input.set_text('')
-        self.formatted_toe_configuration = toe_configuration_options
+        self.security_claim_toe_configuration_input.additem(self.formatted_toe_configuration)
 
-        # ✅ Configure table
+        # Configure table headers and clear
+        self.table.setRowCount(0)
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
             "", "ID", "Name", "Assumptions", "Responsible", "TOE Configuration", "Description", "Comments"
         ])
         self.table.setAlternatingRowColors(True)
-        self.table.clearContents()
-        self.table.setRowCount(0)
 
-        # ✅ Populate rows
-        for claim in cached_claims:
-            row_idx = self.table.rowCount()
-            self.table.insertRow(row_idx)
+        for idx, claim in enumerate(claims):
+            self.table.insertRow(idx)
+            self.table.setCellWidget(idx, 0, TRI.SidebarWidget())
+            self.table.setItem(idx, 1, QTableWidgetItem(claim.sc_id or ""))
+            self.table.setItem(idx, 2, QTableWidgetItem(claim.name or ""))
 
-            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget())
-            self.table.setItem(row_idx, 1, QTableWidgetItem(claim.sc_id))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(claim.name or ""))
+            # 🟨 Assumption Combo
+            assum_combo = MOS.TSMultiSelectComboBox(self.formatted_assumptions, parent=self.table)
+            selected_assumptions = [
+                opt for opt in self.formatted_assumptions
+                if opt.startswith(claim.assumption_id or "")
+            ]
+            assum_combo.set_text(selected_assumptions)
+            assum_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
+            self.table.setCellWidget(idx, 3, assum_combo)
 
-            # Assumptions
-            assum_widget = MOS.TSMultiSelectComboBox(assumptions_options)
-            matched = [opt for opt in assumptions_options if opt.startswith(claim.assumption_id or "")]
-            assum_widget.set_text(matched)
-            self.table.setCellWidget(row_idx, 3, assum_widget)
+            # 🟨 Responsible Combo
+            resp_combo = MOS.TSMultiSelectComboBox(responsible_options, parent=self.table)
+            selected_resp = [r.strip() for r in (claim.responsible or "").split(",") if r.strip()]
+            resp_combo.set_text(selected_resp)
+            resp_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
+            self.table.setCellWidget(idx, 4, resp_combo)
 
-            # Responsible
-            resp_widget = MOS.TSMultiSelectComboBox(responsible_options)
-            resp_values = [val.strip() for val in (claim.responsible or "").split(",") if val.strip()]
-            resp_widget.set_text(resp_values)
-            self.table.setCellWidget(row_idx, 4, resp_widget)
+            # 🟨 TOE Configuration Combo
+            toe_combo = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration, parent=self.table)
+            selected_toe = [
+                opt for opt in self.formatted_toe_configuration
+                if opt.startswith(claim.toe_configuration_id or "")
+            ]
+            toe_combo.set_text(selected_toe)
+            toe_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
+            self.table.setCellWidget(idx, 5, toe_combo)
 
-            # TOE Configuration
-            toe_widget = MOS.TSMultiSelectComboBox(toe_configuration_options)
-            matched_toe = [opt for opt in toe_configuration_options if opt.startswith(claim.toe_configuration_id or "")]
-            toe_widget.set_text(matched_toe)
-            self.table.setCellWidget(row_idx, 5, toe_widget)
+            self.table.setItem(idx, 6, QTableWidgetItem(claim.description or ""))
+            self.table.setItem(idx, 7, QTableWidgetItem(claim.comments or ""))
+            self.row_uuid_map[idx] = claim.uuid
 
-            self.table.setItem(row_idx, 6, QTableWidgetItem(claim.description or ""))
-            self.table.setItem(row_idx, 7, QTableWidgetItem(claim.comments or ""))
-  
-
-        # ✅ Reconnect signals
-        interfaces.unsaved_changes = False
         self.table.itemChanged.connect(self.find_duplicates)
+        interfaces.unsaved_changes = False
         self.loader.close()
- 
+
     def select_first_row(self): 
         if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
+
+    def ensure_row_selection(self):
+            """
+            Ensure at least one row is selected in the table when the panel loads.
+            """
+            if hasattr(self, 'table_widget') and self.table_widget:
+                if self.table_widget.rowCount() > 0 and not self.table_widget.selectedItems():
+                    self.table_widget.selectRow(0)    
+
+    def update_cell_to_cache(self, item=None):
+            # item can be None if called from dropdown
+            if item:
+                row = item.row()
+            else:
+                # Called from dropdown, find current row in focus or selected
+                row = self.table.currentRow()
+            uuid = self.row_uuid_map.get(row)
+            if not uuid:
+                return
+
+            # --- Extract values from row ---
+            sc_id = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            name = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
+            # Multi-select combos:
+            assumptions = self.table.cellWidget(row, 3).selected_items() if self.table.cellWidget(row, 3) else []
+            responsible = self.table.cellWidget(row, 4).selected_items() if self.table.cellWidget(row, 4) else []
+            toe_config = self.table.cellWidget(row, 5).selected_items() if self.table.cellWidget(row, 5) else []
+            description = self.table.item(row, 6).text() if self.table.item(row, 6) else ""
+            comments = self.table.item(row, 7).text() if self.table.item(row, 7) else ""
+
+            updates = {
+                'sc_id': sc_id,
+                'name': name,
+                'assumption_id': ', '.join(a.split('::')[0] for a in assumptions),    # Save just ID
+                'responsible': ', '.join(responsible),
+                'toe_configuration_id': ', '.join(t.split('::')[0] for t in toe_config),
+                'description': description,
+                'comments': comments,
+                # Add any other fields here as needed
+            }
+            SCM.update_security_claim(uuid, updates)
+            interfaces.unsaved_changes = True
 
     def add_new_entry(self):
         self.table.setFocus()
         try:
             self.table.itemChanged.disconnect(self.find_duplicates)
-        except TypeError:
+        except Exception:
             pass
 
-        # Generate a new SC ID using manager
-        sc_id = SCM.generate_new_sc_id()
-        name = f"Security Claim {sc_id.split('-')[-1]}"
-
-        # Create and cache in DB/cache first
-        claim = SCM.create_security_claim(sc_id, name)
-        if not claim:
-            QMessageBox.critical(self, "Error", f"Failed to create Security Claim {sc_id}")
+        new_sc_id = SCM.generate_new_sc_id()
+        sc_name = f"Security Claim {new_sc_id.split('-')[-1]}"
+        created = SCM.create_security_claim(sc_id=new_sc_id, name=sc_name)
+        if not created:
+            QMessageBox.critical(self, "Error", f"Could not create Security Claim {new_sc_id}")
             return
 
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
         self.table.setRowHeight(row_idx, 40)
+        self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget())
 
-        # (Optionally store uuid in a map for quick lookup)
-        if not hasattr(self, 'row_uuid_map'):
-            self.row_uuid_map = {}
-        self.row_uuid_map[row_idx] = claim.uuid
-
-        id_item = QTableWidgetItem(sc_id)
+        id_item = QTableWidgetItem(created.sc_id)
         id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
         self.table.setItem(row_idx, 1, id_item)
-        self.table.setItem(row_idx, 2, QTableWidgetItem(name))
-        self.table.setItem(row_idx, 6, QTableWidgetItem(""))  # description
-        self.table.setItem(row_idx, 7, QTableWidgetItem(""))  # comments
 
-        # Assumptions / Responsible / TOE combo boxes
+        name_item = QTableWidgetItem(created.name or sc_name)
+        self.table.setItem(row_idx, 2, name_item)
+
+        # ---- CRUCIAL: Set previous_text BEFORE find_duplicates ----
+        self.previous_text = name_item.text()
+
+        # ---- Now call find_duplicates (will pass, since name is set and non-empty) ----
+        self.find_duplicates(name_item)
+        self.existing_entries.add(name_item.text())
+
+        # Multi-select input widgets
         assum_widget = MOS.TSMultiSelectComboBox(self.formatted_assumptions)
-        resp_widget = MOS.TSMultiSelectComboBox(self.security_claim_responsible_input.items)
-        toe_widget = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration)
-
+        assum_widget.set_text(created.assumption_id.split(',') if created.assumption_id else [])
         self.table.setCellWidget(row_idx, 3, assum_widget)
+
+        resp_widget = MOS.TSMultiSelectComboBox(self.security_claim_responsible_input.items)
+        resp_widget.set_text(created.responsible.split(',') if created.responsible else [])
         self.table.setCellWidget(row_idx, 4, resp_widget)
+
+        toe_widget = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration)
+        toe_widget.set_text(created.toe_configuration_id.split(',') if created.toe_configuration_id else [])
         self.table.setCellWidget(row_idx, 5, toe_widget)
 
-        self.table.setCurrentCell(row_idx, 2)
+        self.table.setItem(row_idx, 6, QTableWidgetItem(created.description or ""))
+        self.table.setItem(row_idx, 7, QTableWidgetItem(created.comments or ""))
+
+        self.row_uuid_map[row_idx] = created.uuid
 
         self.update_button_states()
         interfaces.unsaved_changes = True
         self.table.itemChanged.connect(self.find_duplicates)
+        self.table.setCurrentCell(row_idx, 2)  # Focus on Name cell
 
-        
     def delete_entry(self):
         selected_rows = sorted(self.table.selectionModel().selectedRows(), key=lambda x: x.row(), reverse=True)
         if not selected_rows:
@@ -462,9 +512,21 @@ class SecurityClaims_Module(QWidget):
     def display_row_data_in_panel(self, data):
         row = self.table.currentRow()
         for i, (label, widget) in enumerate(self.security_claim_property_controls):
-            table_item = self.table.item(row, i + 1)  # +1 if first column is sidebar or row indicator
-            if hasattr(widget, "set_text"):
-                widget.set_text(table_item.text() if table_item and table_item.text() else "")
+            col = i + 1  # Adjust if you have a sidebar at column 0
+
+            # Handle combo boxes from cellWidget
+            if col in [3, 4, 5] and hasattr(widget, "set_text"):
+                combo_widget = self.table.cellWidget(row, col)
+                selected = combo_widget.selected_items() if combo_widget else []
+                widget.set_text(", ".join(selected))  # Match expected input format
+            else:
+                # Standard item cell
+                item = self.table.item(row, col)
+                text = item.text() if item else ""
+                if hasattr(widget, "set_text"):
+                    widget.set_text(text)
+
+        # Refresh property panel visuals
         PVD.SecurityClaims_display_selected_row(
             self.table,
             self.security_claim_property_controls,
@@ -473,6 +535,7 @@ class SecurityClaims_Module(QWidget):
             self.property_panel_manager.property_panel,
             self.property_panel_manager.toggle_button
         )
+
 
     def update_button_states(self):
         selected_rows = self.table.selectionModel().selectedRows()
@@ -487,43 +550,10 @@ class SecurityClaims_Module(QWidget):
             self.save_button.setEnabled(self.table.rowCount() > 0)
 
 
-    def update_cell_to_cache(self, item=None):
-        # item can be None if called from dropdown
-        if item:
-            row = item.row()
-        else:
-            # Called from dropdown, find current row in focus or selected
-            row = self.table.currentRow()
-        uuid = self.row_uuid_map.get(row)
-        if not uuid:
-            return
-
-        # --- Extract values from row ---
-        sc_id = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
-        name = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
-        # Multi-select combos:
-        assumptions = self.table.cellWidget(row, 3).selected_items() if self.table.cellWidget(row, 3) else []
-        responsible = self.table.cellWidget(row, 4).selected_items() if self.table.cellWidget(row, 4) else []
-        toe_config = self.table.cellWidget(row, 5).selected_items() if self.table.cellWidget(row, 5) else []
-        description = self.table.item(row, 6).text() if self.table.item(row, 6) else ""
-        comments = self.table.item(row, 7).text() if self.table.item(row, 7) else ""
-
-        updates = {
-            'sc_id': sc_id,
-            'name': name,
-            'assumption_id': ', '.join(a.split('::')[0] for a in assumptions),    # Save just ID
-            'responsible': ', '.join(responsible),
-            'toe_configuration_id': ', '.join(t.split('::')[0] for t in toe_config),
-            'description': description,
-            'comments': comments,
-            # Add any other fields here as needed
-        }
-        SCM.update_security_claim(uuid, updates)
-        interfaces.unsaved_changes = True
-
     # --- Helper bindings: keep these exactly as in Security Controls ---
 
-    def find_duplicates(self, item): find_duplicates(self, item)
+    def find_duplicates(self, item):
+        unique_find_duplicates(self, item)
     def store_selected_entry(self, item): store_selected_entry(self, item)
     def refrash_existing_entries(self): refrash_existing_entries(self)
     def set_unsaved_changes(self): interfaces.unsaved_changes = True

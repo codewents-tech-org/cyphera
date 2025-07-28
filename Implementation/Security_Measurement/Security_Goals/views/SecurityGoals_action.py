@@ -176,7 +176,6 @@ class SecurityGoals_Module(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.itemChanged.connect(self.set_unsaved_changes)
 
-
     def on_row_selection_changed(self, selected, deselected):
         TVH.on_row_selection_changed(self.table)
         if self.table.currentRow() >= 0:
@@ -197,52 +196,85 @@ class SecurityGoals_Module(QWidget):
             self.row_selected.emit(payload)
 
     def load_data(self):
-        self.loader = RoundLoader(self, label_text="Loading...")
+        self.loader = RoundLoader(self, label_text="Loading Security Goals...")
         self.loader.show()
         QApplication.processEvents()
 
         try:
-            # -- Prepare responsible and TOE config options (analogue to security_property_list)
-            goal_rows = SGM.load_all_security_goals()
-            self.security_property_list = [
-                f"{g.sg_id}::{g.name}" for g in goal_rows if g.sg_id and g.name
-            ]  # For compatibility with controls pattern
-
-            # (If you have a MultiSelect for security_goals, use as below)
-            # self.security_goals_multiselect_input.additem(self.security_property_list)
-
             self.table.itemChanged.disconnect(self.find_duplicates)
-            rows = SGM.load_all_security_goals()
+        except Exception:
+            pass
+
+        try:
+            # ✅ Load Security Goals
+            goal_rows = SGM.load_all_security_goals()
+
+            # ✅ Prepare Responsible options
+            responsible_set = set()
+            for g in goal_rows:
+                if g.responsible:
+                    responsible_set.update([r.strip() for r in g.responsible.split(',') if r.strip()])
+            self.responsible_options = sorted(responsible_set) or ["Customer", "Supplier"]
+
+            # ✅ Prepare TOE Config options
+            toe_rows = get_instances(TOEConfiguration, {'is_deleted': False})
+            self.formatted_toe_configuration = [
+                f"{t.toe_configuration_id}::{t.toe_configuration_name}"
+                for t in toe_rows
+                if t.toe_configuration_id and t.toe_configuration_name
+            ]
+            print("📦 TOE Rows:", toe_rows)
+            print("📋 Formatted TOE Config:", self.formatted_toe_configuration)
+
+            # ✅ Also update property panel TOE dropdown
+            if hasattr(self, "security_goals_toe_configuration_input"):
+                print("✅ TOE input exists")
+                self.security_goals_toe_configuration_input.additem(self.formatted_toe_configuration)
+            else:
+                print("❌ security_goals_toe_configuration_input not found")
 
             self.table.setRowCount(0)
-            for idx, obj in enumerate(rows):
+            for idx, obj in enumerate(goal_rows):
                 self.table.insertRow(idx)
                 self.table.setCellWidget(idx, 0, TRI.SidebarWidget())
                 self.table.setItem(idx, 1, QTableWidgetItem(obj.sg_id or ""))
                 self.table.setItem(idx, 2, QTableWidgetItem(obj.name or ""))
 
-                # Multi-select for Responsible (replace with actual multi-select logic if needed)
-                resp_combo = MOS.TSMultiSelectComboBox(self.security_property_list, parent=self.table)
+                # Responsible dropdown
+                resp_combo = MOS.TSMultiSelectComboBox(self.responsible_options, parent=self.table)
                 selected_resp = [r.strip() for r in (obj.responsible or "").split(",") if r.strip()]
                 resp_combo.set_text(selected_resp)
                 resp_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
                 self.table.setCellWidget(idx, 3, resp_combo)
 
-                # TOE config (replace with your own logic)
+                # TOE Configuration dropdown
                 toe_combo = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration, parent=self.table)
-                selected_toe = [obj.toe_configuration_id] if obj.toe_configuration_id else []
+                selected_toe = [
+                    opt for opt in self.formatted_toe_configuration
+                    if opt.startswith(obj.toe_configuration_id or "")
+                ]
                 toe_combo.set_text(selected_toe)
+                toe_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
                 self.table.setCellWidget(idx, 4, toe_combo)
+                print(f"🧪 TOE selected for row {idx}: {selected_toe}")
 
                 self.table.setItem(idx, 5, QTableWidgetItem(obj.description or ""))
                 self.table.setItem(idx, 6, QTableWidgetItem(obj.comments or ""))
+
                 self.row_uuid_map[idx] = obj.uuid
 
             self.table.itemChanged.connect(self.find_duplicates)
             interfaces.unsaved_changes = False
+
         finally:
             self.loader.close()
 
+        if hasattr(self, "security_goals_responsible_input"):
+            self.security_goals_responsible_input.additem(self.responsible_options)
+
+        if hasattr(self, "security_goals_toe_configuration_input"):
+            print("✅ TOE input exists")
+            self.security_goals_toe_configuration_input.additem(self.formatted_toe_configuration)
 
     def select_first_row(self): 
         if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
@@ -291,8 +323,6 @@ class SecurityGoals_Module(QWidget):
         SGM.update_security_goal(uuid, updates)
         interfaces.unsaved_changes = True
 
-
-
     def add_new_entry(self):
         self.table.setFocus()
         try:
@@ -319,19 +349,21 @@ class SecurityGoals_Module(QWidget):
         name_item = QTableWidgetItem(created.name or sg_name)
         self.table.setItem(row_idx, 2, name_item)
 
-        # ---- CRUCIAL: Set previous_text BEFORE find_duplicates ----
+        # Track for duplicate prevention
         self.previous_text = name_item.text()
-
-        # ---- Now call find_duplicates (will pass, since name is set and non-empty) ----
         self.find_duplicates(name_item)
         self.existing_entries.add(name_item.text())
 
-        responsible_widget = MOS.TSMultiSelectComboBox(self.security_goals_responsible_input.items)
+        # Responsible dropdown
+        responsible_widget = MOS.TSMultiSelectComboBox(self.responsible_options)
         responsible_widget.set_text(created.responsible.split(',') if created.responsible else [])
+        responsible_widget.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
         self.table.setCellWidget(row_idx, 3, responsible_widget)
 
+        # TOE Configuration dropdown
         toe_widget = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration)
         toe_widget.set_text(created.toe_configuration_id.split(',') if created.toe_configuration_id else [])
+        toe_widget.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
         self.table.setCellWidget(row_idx, 4, toe_widget)
 
         self.table.setItem(row_idx, 5, QTableWidgetItem(created.description or ''))
@@ -342,8 +374,7 @@ class SecurityGoals_Module(QWidget):
         self.update_button_states()
         interfaces.unsaved_changes = True
         self.table.itemChanged.connect(self.find_duplicates)
-        self.table.setCurrentCell(row_idx, 2)  # Column 2 = Name
-
+        self.table.setCurrentCell(row_idx, 2)
 
     def delete_entry(self):
         selected_row = self.table.currentRow()
@@ -424,17 +455,39 @@ class SecurityGoals_Module(QWidget):
     def on_sg_property_comments_changed(self):
         PVD.on_property_multiline_changed(self.table, 6, self.security_goals_comments_input)
 
-    def on_sg_property_comments_changed(self):
-        PVD.on_property_multiline_changed(self.table, 5, self.security_goals_comments_input)
 
     def display_row_data_in_panel(self, data):
         row = self.table.currentRow()
-        for i, (label, widget) in enumerate(self.security_goals_property_controls):
-            table_item = self.table.item(row, i + 1)
+
+        # Explicit mapping: label → column index
+        label_column_map = {
+            "ID": 1,
+            "Name": 2,
+            "Responsible": 3,
+            "TOE Configuration": 4,
+            "Description": 5,
+            "Comments": 6
+        }
+
+        for label, widget in self.security_goals_property_controls:
+            col = label_column_map.get(label)
+            if col is None:
+                continue
+
+            if label in ["Responsible", "TOE Configuration"]:
+                cell_widget = self.table.cellWidget(row, col)
+                selected = cell_widget.selected_items() if cell_widget else []
+                text = ", ".join(selected)
+            else:
+                item = self.table.item(row, col)
+                text = item.text() if item else ""
+
             if hasattr(widget, "set_text"):
-                widget.set_text(table_item.text() if table_item and table_item.text() else "")
+                widget.set_text(text)
+            elif hasattr(widget, "setText"):
+                widget.setText(text)
 
-
+        # Update visual selection highlight
         PVD.SecurityGoals_display_selected_row(
             self.table,
             self.security_goals_property_controls,
@@ -460,6 +513,7 @@ class SecurityGoals_Module(QWidget):
                 input_widget.setReadOnly(True)
             setattr(self, f'security_goals_{field["label"].lower().replace(" ", "_")}_input', input_widget)
 
+        # Add only one global Save button at the end
         if SAVE_BUTTON.get("enabled"):
             self.save_button = self.property_factory.create_save_button(
                 layout=self.property_layout,
@@ -471,7 +525,7 @@ class SecurityGoals_Module(QWidget):
             self.save_button.setEnabled(False)
 
         self.property_save_clicked.connect(self.handle_property_save_signal)
-
+        
     def handle_property_save_signal(self, payload):
         print(f"[TARA] 🔔 Security Goals Save Signal Received → {payload}")
 
