@@ -1,8 +1,9 @@
 import logging
 from collections import OrderedDict
-from controllers.schema_manager import get_instances, get_first_instance, update_instance, create_instance, delete_instance, bulk_update_instances
+from controllers.schema_manager import bulk_insert_instances, get_instances, get_first_instance, update_instance, create_instance, delete_instance, bulk_update_instances
 from controllers.database_tables.analysis_tables import ThreatScenarios
-
+import Target_Of_Evaluation.Scope.controllers.scope_synchronizations as TSS
+import Analysis.models.analysis_synchronization as AS
 logger = logging.getLogger("threat_scenario_manager")
 
 # In-memory cache for ThreatScenario
@@ -31,25 +32,63 @@ def update_threat_scenario(ts_id, updates: dict):
         return changed
     return False
 
+
 def persist_threat_scenario_changes():
-    """Flush all changed (not deleted) threat scenario records to DB."""
+    """Flush all changes (insert, update, delete) for threat scenarios to DB."""
+
+    print("🔄 Syncing Threat Scenario changes from cache...")
+
     updates = []
+    inserts = []
+    deleted_ids = []
+
+    all_cache_ids = set(THREAT_SCENARIO_CACHE.keys())
+
     for ts_id, entry in THREAT_SCENARIO_CACHE.items():
-        if entry['changed'] and not entry['deleted']:
-            obj = entry['record']
-            updates.append({
-                'ts_id': obj.ts_id,
-                'threat': obj.threat,
-                'damage_scenarios': obj.damage_scenarios,
-                'toe_configuration': obj.toe_configuration,
-                'reasoning': obj.reasoning,
-                'comments': obj.comments,
-                'is_deleted': 'False'
-            })
+        obj = entry['record']
+        row = {
+            'ts_id': obj.ts_id,
+            'threat_id': obj.threat_id,  # ✅ FIXED
+            'ds_id': obj.ds_id,          # ✅ FIXED
+            'toe_configuration_id': obj.toe_configuration_id,  # ✅ FIXED
+            'reasoning': obj.reasoning,
+            'comments': obj.comments,
+            'is_deleted': 'False',
+        }
+
+
+        if entry.get('deleted'):
+            deleted_ids.append(obj.ts_id)
+        elif entry.get('is_new'):
+            inserts.append(ThreatScenarios(**row))
+            entry['is_new'] = False
+        elif entry.get('changed'):
+            row['uuid'] = obj.uuid
+            updates.append(row)
             entry['changed'] = False
+
+    # ✅ Insert new threat scenarios
+    if inserts:
+        bulk_insert_instances(inserts)
+        print(f"✅ Inserted {len(inserts)} threat scenarios.")
+
+    # ✅ Update changed threat scenarios
     if updates:
-        bulk_update_instances(ThreatScenario, updates)
-        print(f"🔄 Updated {len(updates)} threat scenarios in DB.")
+        bulk_update_instances(ThreatScenarios, updates)
+        print(f"🛠️  Updated {len(updates)} threat scenarios.")
+
+    # ✅ Delete removed threat scenarios
+    existing_db_ids = {t.ts_id for t in get_instances(ThreatScenarios)}
+    to_delete = existing_db_ids - all_cache_ids
+    for ts_id in to_delete:
+        delete_instance(ThreatScenarios, {'ts_id': ts_id})
+    if to_delete:
+        print(f"🗑️  Deleted {len(to_delete)} threat scenarios.")
+
+    # ✅ Trash table insert
+   
+    print("✅ ThreatScenario persistence complete.")
+
 
 def refresh_threat_scenarios_cache():
     """Force reload the cache from DB."""
@@ -59,5 +98,5 @@ def delete_threat_scenario(ts_id):
     """Mark as deleted in cache and DB."""
     if ts_id in THREAT_SCENARIO_CACHE:
         THREAT_SCENARIO_CACHE[ts_id]['deleted'] = True
-        update_instance(ThreatScenario, {"ts_id": ts_id}, {"is_deleted": "True"})
+        update_instance(ThreatScenarios, {"ts_id": ts_id}, {"is_deleted": "True"})
 

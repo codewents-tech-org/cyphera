@@ -220,7 +220,7 @@ def sync_threat_scenarios(
     threat_name_map,
     threat_toe_config_map,
     damage_scenario_map,
-    existing_threat_ds_map
+    existing_threat_ds_map  # Optional future use
 ):
     """
     Syncs the ThreatScenarios table using threat-damage mappings.
@@ -228,58 +228,80 @@ def sync_threat_scenarios(
     - Updates existing entries if threat_id + ds_id match.
     - Creates new entries with a new ts_id if not found.
     """
-    logger.info("🔄 Syncing ThreatScenarios...")
 
-    # Step 1: Map existing entries by (threat_id, ds_id) – not uuid
+    logger.info("🔄 Starting sync_threat_scenarios...")
+    logger.debug(f"Input threat_damage_map: {threat_damage_map}")
+    logger.debug(f"Input threat_name_map: {threat_name_map}")
+    logger.debug(f"Input threat_toe_config_map: {threat_toe_config_map}")
+    logger.debug(f"Input damage_scenario_map: {damage_scenario_map}")
+
+    # Step 1: Fetch and map existing entries
+    logger.info("🔍 Fetching existing ThreatScenarios from DB...")
     existing_ts = get_instances(ThreatScenarios, {})
+    logger.debug(f"🔍 Total existing ThreatScenario rows: {len(existing_ts)}")
+
     existing_pairs = {
-        (ts.threat_id, (ts.ds_id or '').split("::")[0].strip()): ts
+        (ts.threat_id, ts.ds_id): ts
         for ts in existing_ts
         if ts.threat_id and ts.ds_id
     }
 
+    logger.debug(f"🔑 Mapped {len(existing_pairs)} existing threat-ds pairs.")
+
+    # Step 2: Loop through new data
     for threat_id, ds_list in threat_damage_map.items():
         threat_name = threat_name_map.get(threat_id, "")
         toe_cfg = threat_toe_config_map.get(threat_id, "")
+        logger.info(f"\n🧠 Processing threat: {threat_id} ({threat_name}) → {len(ds_list)} DS linked")
 
         for ds_id in ds_list:
             ds_id = ds_id.strip()
-            ds_full = f"{ds_id}::{damage_scenario_map.get(ds_id, '')}"
             key = (threat_id, ds_id)
+            logger.debug(f"➡️  Checking pair: Threat={threat_id}, DS={ds_id}")
 
             if key in existing_pairs:
                 ts = existing_pairs[key]
-                # ✅ Update existing record using ts_id (not uuid)
-                update_instance(
-                    ThreatScenarios,
-                    {'ts_id': ts.ts_id},
-                    {
-                        'ds_id': ds_full,
-                        'toe_configuration_id': toe_cfg,
-                        'reasoning': ts.reasoning or '',
-                        'comments': ts.comments or '',
-                        'updated_by': 'system',
-                        'is_deleted': "False"
-                    }
-                )
-                logger.info(f"🔁 Updated ThreatScenario: {ts.ts_id} → [{threat_id} / {ds_id}]")
-            else:
-                # ✅ Create new record with new ts_id
-                new_ts = ThreatScenarios(
-                    ts_id=generate_unique_ts_id(),
-                    threat_id=threat_id,
-                    ds_id=ds_full,
-                    toe_configuration_id=toe_cfg,
-                    reasoning='',
-                    comments='',
-                    created_by='system',
-                    updated_by='system',
-                    is_deleted="False"
-                )
-                create_instance(new_ts)
-                logger.info(f"➕ Inserted new ThreatScenario → [{threat_id} / {ds_id}]")
+                logger.info(f"🔁 Matched existing TS_ID={ts.ts_id} for Threat={threat_id}, DS={ds_id}")
 
-    logger.info("✅ ThreatScenarios sync complete.")
+                try:
+                    update_instance(
+                        ThreatScenarios,
+                        {'ts_id': ts.ts_id},
+                        {
+                            'toe_configuration_id': toe_cfg,
+                            'reasoning': ts.reasoning or '',
+                            'comments': ts.comments or '',
+                            'updated_by': 'system',
+                            'is_deleted': "False"
+                        }
+                    )
+                    logger.info(f"✅ Updated TS_ID={ts.ts_id}")
+                except Exception as e:
+                    logger.exception(f"❌ Failed to update TS_ID={ts.ts_id}: {e}")
+
+            else:
+                new_ts_id = generate_unique_ts_id()
+                logger.info(f"➕ No match found → Creating new TS_ID={new_ts_id} for Threat={threat_id}, DS={ds_id}")
+                try:
+                    new_ts = ThreatScenarios(
+                        ts_id=new_ts_id,
+                        threat_id=threat_id,
+                        ds_id=ds_id,
+                        toe_configuration_id=toe_cfg,
+                        reasoning='',
+                        comments='',
+                        created_by='system',
+                        updated_by='system',
+                        is_deleted="False"
+                    )
+                    create_instance(new_ts)
+                    logger.info(f"✅ Inserted new TS_ID={new_ts_id}")
+                except Exception as e:
+                    logger.exception(f"❌ Failed to insert new TS_ID={new_ts_id}: {e}")
+
+    logger.info("🎯 ThreatScenarios sync complete.")
+
+
 
 
 def sync_attack_tree_with_threats():
@@ -532,7 +554,7 @@ def sync_securityGoals_from_securityControl():
 
 def update_riskData_from_securityClaims():
     logger.info("🔄 Updating RiskData from SecurityClaims")
-
+    print("update riska data from claims")
     # ✅ Step 1: Fetch all valid SecurityClaim IDs
     security_claims = get_instances(SecurityClaims, {})
     valid_claim_ids = {sc.sc_id for sc in security_claims if sc.sc_id}

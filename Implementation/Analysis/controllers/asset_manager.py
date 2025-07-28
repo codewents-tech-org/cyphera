@@ -77,11 +77,12 @@ def persist_asset_changes():
     # AS.update_threatscenario_from_threat()
     # AS.update_risktreatement_data()
     # AS.remove_orphaned_attack_tree_rows()
-    # AS.update_attack_tree_text()
     # AS.sync_attack_tree_with_threats()
     # AS.remove_nonexistent_threat_scenarios_from_Risk_data()
     # TSS.update_scope_threats()
-
+    
+    sync_security_controls_with_riskcontrol
+    sync_security_controls_with_attack
     logger.info("✅ Asset-related sync operations completed.")
 
 

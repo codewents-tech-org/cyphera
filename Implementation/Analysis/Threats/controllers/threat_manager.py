@@ -4,7 +4,8 @@ from controllers.schema_manager import (
 )
 from controllers.tablemodel import Threats
 from collections import OrderedDict
-
+import Target_Of_Evaluation.Scope.controllers.scope_synchronizations as TSS
+import Analysis.models.analysis_synchronization as AS
 logger = logging.getLogger(__name__)
 
 # 🧠 In-memory cache: uuid → {record, changed, deleted}
@@ -109,7 +110,11 @@ def persist_threat_changes():
     if updates:
         bulk_update_instances(Threats, updates)
         print(f"🔄 Updated {len(updates)} threats in DB.")
-
+        AS.update_threatscenario_from_threat()
+        AS.remove_threats_from_mitigation()
+        AS.sync_attack_tree_with_threats()
+        AS.update_risktreatement_data()
+        AS.remove_nonexistent_threat_scenarios_from_Risk_data()
 def refresh_threats_cache():
     """
     Utility: Force reload the cache from DB (discarding unsaved edits).

@@ -79,6 +79,7 @@ Change History:
 |                |                      |                                                             |                      |
 +----------------+----------------------+-------------------------------------------------------------+----------------------+
 """
+from components.table.multiselect_combo import MultiSelectComboSelector
 from PyQt5.QtCore import Qt                          
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication, QLabel, QTableWidgetItem
 
@@ -90,7 +91,7 @@ import Analysis.controllers.analysis_TableRefreshRecord as TFR
 import Analysis.controllers.analysis_PropertyValueDisplay as PVD
 from Analysis.Threat_Scenarios.views.threatscenarios_toolbar_panel import create_toolbar
 from Analysis.Threat_Scenarios.config.threat_scenarios_config import PROPERTY_CONFIG, SAVE_BUTTON
-from Analysis.Threat_Scenarios.controller.threat_scenario_manager import load_all_threat_scenarios
+from Analysis.Threat_Scenarios.controller.threat_scenario_manager import load_all_threat_scenarios, persist_threat_scenario_changes, update_threat_scenario
 from models.helper import TS_header
 from controllers.database_tables.target_of_evaluation_tables import TOEConfiguration
 from controllers.schema_manager import get_instances
@@ -115,10 +116,10 @@ class TS_Module(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.row_uuid_map = {}
         self.initUI()
 
     def initUI(self):
-           
         self.row_selected.connect(self.display_row_data_in_panel)
 
         self.HEIGHT_MAP = {}
@@ -129,45 +130,56 @@ class TS_Module(QWidget):
 
         self.toggle_button = self.property_panel_manager.toggle_button
         self.property_panel = self.property_panel_manager.property_panel
-        self.property_layout = self.property_panel_manager.property_layout      # ✅ emit it
-        
-        self.ts_property_controls = []    
+        self.property_layout = self.property_panel_manager.property_layout  # ✅ emit it
+
+        self.ts_property_controls = []
 
         self.create_property_panel_signal.connect(self.build_property_panel)
         self.create_property_panel_signal.emit()
 
-        
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0,0,0,0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         self.setLayout(main_layout)
-        
+
+        # Toolbar
         create_toolbar(self)
         main_layout.addWidget(self.toolbar)
-        action_panel.create_action_panel(self)
-        table_panel.TablePanelWrapper.create_table_panel(self)
 
-        # Layout integration
-        self.action_panel_layout.addLayout(self.table_layout)
+        # Action panel
+        action_panel.create_action_panel(self)
+
+        # ---- Table panel setup (Same style as Threat module) ----
+        self.table_wrapper = table_panel.TablePanelWrapper(
+            use_row_indicator=True, use_tree_indicator=False, parent=self
+        )
+        self.table_wrapper.create_table_panel()
+        self.table_wrapper.set_headers("threat_scenarios")  # ✅ Correct table header mapping
+
+        self.table = self.table_wrapper.table
+        self.table_layout = self.table_wrapper.table_layout
+
+        # Add actual widgets to layout
+        self.action_panel_layout.addWidget(self.table_wrapper.table)
         self.action_panel_layout.addWidget(self.property_panel_manager.switch_property_panel)
         self.action_panel_layout.addWidget(self.property_panel_manager.property_panel)
         main_layout.addWidget(self.action_panel)
 
-
-          # Enable/disable buttons
+        # Enable/disable buttons
         self.submit_button.setEnabled(False)
         self.save_button.setEnabled(False)
 
-        # Connect buttons to functions
+        # Connect buttons
         self.submit_button.clicked.connect(self.submit_changes)
         self.save_button.clicked.connect(self.submit_changes)
-   
-        # Connect table signals to state updater
+
+        # Connect table signals
         self.table.itemChanged.connect(self.update_button_states)
         self.table.itemChanged.connect(self.set_unsaved_changes)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.previous_text = None
+
 
 
     def on_row_selection_changed(self, selected, deselected): 
@@ -245,61 +257,69 @@ class TS_Module(QWidget):
             self.save_button.setEnabled(row_count > 0)
         # Update "Submit" button state
         self.submit_button.setEnabled(row_count > 0)
-
     def load_data(self):
+        # ✅ Show loading animation
         self.loader = RoundLoader(self, label_text="Loading...")
         self.loader.show()
-        QApplication.processEvents()  # Ensure UI updates
+        QApplication.processEvents()
 
-        # --- Load TOE configurations (ORM) ---
-        toe_options = []
-        try:
-            toes = get_instances(TOEConfiguration)
-            for toe in toes:
-                toe_options.append(f"{toe.toe_configuration_id}::{toe.toe_configuration_name}")
-            self.toes = toe_options
-            self.TS_toe_configuration_input.items = toe_options
-            self.TS_toe_configuration_input.update_items()
-            self.toe_configuration_option_list = toe_options
-        except Exception as ex:
-            print(f"[ERROR][load_data] Failed to load TOE Configurations: {ex}")
-            self.toes = []
-            self.toe_configuration_option_list = []
-            self.TS_toe_configuration_input.items = []
-            self.TS_toe_configuration_input.update_items()
+        # ✅ 1. Load dropdown options
+        self.toe_configuration_option_list = [
+            f"{toe.toe_configuration_id}::{toe.toe_configuration_name}"
+            for toe in get_instances(TOEConfiguration)
+        ]
+        self.TS_toe_configuration_input.additem(self.toe_configuration_option_list)
+        self.TS_toe_configuration_input.set_text('')
 
-        # --- Load threat scenarios using cache manager ---
+        # ✅ 2. Column → DB Field Mapping
+        self.ts_column_field_map = {
+            "ID": "ts_id",
+            "Threat": "threat_id",
+            "Damage Scenarios": "ds_id",
+            "TOE Configuration": "toe_configuration_id",
+            "Reasoning": "reasoning",
+            "Comments": "comments"
+        }
+
+        # ✅ 3. Columns that use dropdowns
+        self.ts_dropdown_columns = {
+            "TOE Configuration": self.toe_configuration_option_list
+        }
+
+        ts_headers = list(self.ts_column_field_map.keys())
+        self.table.setRowCount(0)
+
+        # ✅ 4. Load rows from DB
+        print("🔄 Loading threat scenario records...")
         threat_scenarios = load_all_threat_scenarios()
-        table = self.table
-        table.setRowCount(0)
 
-        # --- Set up table headers explicitly ---
-      
-        headers = [""] + TS_header    # If you want an empty column for the sidebar widget
-        table.setColumnCount(len(headers))
-        for idx, header in enumerate(headers):
-            item = QTableWidgetItem(header)
-            item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            table.setHorizontalHeaderItem(idx, item)
-        table.horizontalHeader().setFixedHeight(50)
-        # Optionally: Set stretch or resize mode for each column
-
-        # --- Fill table rows as before ---
         for row_idx, ts in enumerate(threat_scenarios):
-            table.insertRow(row_idx)
-            # Example:
-            # table.setItem(row_idx, 1, QTableWidgetItem(ts.ts_id))
-            # ... fill other columns as before ...
+            self.table.insertRow(row_idx)
 
+            for col_idx, header in enumerate(ts_headers, start=1):  # skip icon col
+                field = self.ts_column_field_map[header]
+                value = getattr(ts, field, "") or ""
+
+                if header in self.ts_dropdown_columns:
+                    options = self.ts_dropdown_columns[header]
+                    self.add_multiselect_to_table_cell(row_idx, col_idx, options, value, field)
+                else:
+                    self.table.setItem(row_idx, col_idx, QTableWidgetItem(value))
+
+            # ✅ Store UUID for later update tracking
+            self.row_uuid_map[row_idx] = ts.uuid
+
+        # ✅ 5. Finalize
         interfaces.unsaved_changes = False
         self.loader.close()
+        print("✅ ThreatScenario table loaded successfully.")
 
 
     def refresh_data(self): TFR.TS_refresh_data(self.table)
     def submit_changes(self): 
         self.table.setFocus()
         self.update_button_states()
-        TSR.TS_submit_changes(self.table)
+        persist_threat_scenario_changes()
         interfaces.unsaved_changes = False
 
     def on_TS_property_threat_changed(self): PVD.on_property_line_changed(self.table, 2, self.TS_threat_input)
@@ -408,8 +428,40 @@ class TS_Module(QWidget):
             self.property_panel_manager.toggle_button
         )
 
+    def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
+        """
+        Generic helper for adding MultiSelectComboSelector to Threat Scenarios table.
+
+        Args:
+            row_index (int): Table row index.
+            column_index (int): Table column index.
+            option_list (list[str]): List of selectable options.
+            current_value (str): Pre-selected value from DB (comma-separated string).
+            update_field (str): Field to update in backend via `update_threat_scenario`.
+
+        """
+        combo = MultiSelectComboSelector(option_list, placeholder="Select")
+
+        # Set pre-selected items
+        if current_value:
+            if isinstance(current_value, str):
+                selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
+            else:
+                selected_items = current_value
+            combo.set_selected_items(selected_items)
+
+        def on_selection_change():
+            value = ", ".join(combo.selected_items())
+            self.table.setItem(row_index, column_index, QTableWidgetItem(value))
+            uuid = self.row_uuid_map.get(row_index)
+            if uuid:
+                update_threat_scenario(uuid, {update_field: value})  # ✅ Function change
+                interfaces.unsaved_changes = True
+
+        combo.model().dataChanged.connect(on_selection_change)
+        self.table.setCellWidget(row_index, column_index, combo)
+
+        
     
-    
-   
 
 

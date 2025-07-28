@@ -410,6 +410,7 @@ class SecurityClaims_Module(QWidget):
         SCM.persist_security_claim_changes()
 
         # Sync downstream
+        print("claims syschronsiaiton to risk data")
         AS.update_riskData_from_securityClaims()
         AS.remove_claims_from_risk_data()
 
