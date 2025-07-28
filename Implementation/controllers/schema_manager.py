@@ -19,6 +19,7 @@ create, read, update, delete (CRUD) operations using SQLAlchemy ORM.
 - Coordinate schema initialization and database migrations
 - Auto-log actions using log_crud_action
 """
+from asyncio.log import logger
 import time
 import os
 import uuid
@@ -267,23 +268,38 @@ def bulk_update_instances(model, update_data_list, filter_key="uuid", session=No
     """
     Performs bulk update on model instances using a common filter_key (default: uuid).
 
-    Params:
-        model: SQLAlchemy model class
-        update_data_list: List of dicts with filter_key + updated fields
-        filter_key: Field used for filtering (default: uuid)
-        session: injected by @handle_db_session
+    Args:
+        model: SQLAlchemy ORM model class
+        update_data_list: List of dicts. Each dict must include the filter_key + update fields.
+        filter_key: Field name used for identifying records (default: 'uuid')
+        session: Injected DB session (handled by @handle_db_session)
     """
     if not update_data_list:
+        logger.info("⛔ No data to update.")
         return
+    print("check bulk update instances working or not 111111111111")
+    try:
+        for original_data in update_data_list:
+            data = original_data.copy()  # Avoid mutating original list
+            filter_val = data.pop(filter_key, None)
+            if filter_val is None:
+                logger.warning(f"⚠️ Skipping update, missing {filter_key} in: {original_data}")
+                continue
 
-    for data in update_data_list:
-        filter_val = data.pop(filter_key)
-        stmt = (
-            update(model)
-            .where(getattr(model, filter_key) == filter_val)
-            .values(**data)
-        )
-        session.execute(stmt)
+            stmt = (
+                update(model)
+                .where(getattr(model, filter_key) == filter_val)
+                .values(**data)
+            )
+            session.execute(stmt)
+
+        session.commit()
+        logger.info(f"✅ Bulk updated {len(update_data_list)} instances of {model.__name__}")
+
+    except Exception as e:
+        logger.exception(f"❌ Bulk update failed for model {model.__name__}")
+        session.rollback()
+        raise
 
 
 @db_error_handler

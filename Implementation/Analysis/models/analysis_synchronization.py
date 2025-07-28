@@ -144,9 +144,10 @@ def sync_threats_with_assets():
                     is_deleted=False
                 )
                 create_instance(new_threat)
+                print(new_threat)
 
     # ✅ Resync dependent structures
-    sync_attack_tree_with_threats()
+    # sync_attack_tree_with_threats()
     update_threatscenario_from_threat()
 
 
@@ -204,6 +205,7 @@ def update_threatscenario_from_threat():
 
 
     # Function to generate a unique threat scenario ID
+
 def generate_unique_ts_id():
         try:
             # Get max suffix from both threat_scenarios and trash (optional if trash is modeled)
@@ -213,57 +215,71 @@ def generate_unique_ts_id():
             logger.exception("Error generating unique TS ID")
             return ""
 
-def sync_threat_scenarios(threat_damage_map, threat_name_map, threat_toe_config_map, damage_scenario_map, existing_threat_ds_map):
-        # ✅ Step 1: Fetch existing ThreatScenarios for update or match
-        existing_ts = get_instances(ThreatScenarios, {})
-        existing_pairs = {
-            (ts.threat_id, (ts.ds_id or '').split("::")[0]): ts
-            for ts in existing_ts
-            if ts.threat_id and ts.ds_id
-        }
+def sync_threat_scenarios(
+    threat_damage_map,
+    threat_name_map,
+    threat_toe_config_map,
+    damage_scenario_map,
+    existing_threat_ds_map
+):
+    """
+    Syncs the ThreatScenarios table using threat-damage mappings.
 
-        for threat_id, damage_scenarios in threat_damage_map.items():
-            threat_name = threat_name_map.get(threat_id, "")
-            toe_cfg = threat_toe_config_map.get(threat_id, "")
+    - Updates existing entries if threat_id + ds_id match.
+    - Creates new entries with a new ts_id if not found.
+    """
+    logger.info("🔄 Syncing ThreatScenarios...")
 
-            for damage_scenario in damage_scenarios:
-                damage_scenario = damage_scenario.strip()
-                ds_full = f"{damage_scenario}::{damage_scenario_map.get(damage_scenario, '')}"
-                threat_display = f"{threat_id} - {threat_name}"
+    # Step 1: Map existing entries by (threat_id, ds_id) – not uuid
+    existing_ts = get_instances(ThreatScenarios, {})
+    existing_pairs = {
+        (ts.threat_id, (ts.ds_id or '').split("::")[0].strip()): ts
+        for ts in existing_ts
+        if ts.threat_id and ts.ds_id
+    }
 
-                key = (threat_id, damage_scenario)
-                if key in existing_pairs:
-                    # ✅ Update existing row
-                    ts = existing_pairs[key]
-                    update_instance(
-                        ThreatScenarios,
-                        {'ts_id': ts.ts_id},
-                        {
-                            'threat_id': threat_id,
-                            'ds_id': ds_full,
-                            'toe_configuration_id': toe_cfg,
-                            'reasoning': ts.reasoning or '',
-                            'comments': ts.comments or '',
-                            'updated_by': 'system'
-                        }
-                    )
-                    logger.info(f"🔁 Updated ThreatScenario: {ts.ts_id} for {threat_id} / {damage_scenario}")
-                else:
-                    # ✅ Create new TS row
-                    new_ts = ThreatScenarios(
-                        ts_id=generate_unique_ts_id(),
-                        threat_id=threat_id,
-                        ds_id=ds_full,
-                        toe_configuration_id=toe_cfg,
-                        reasoning='',
-                        comments='',
-                        created_by='system',
-                        updated_by='system',
-                        is_deleted=False
-                    )
-                    create_instance(new_ts)
-                    logger.info(f"➕ Inserted new ThreatScenario for {threat_id} / {damage_scenario}")
-    
+    for threat_id, ds_list in threat_damage_map.items():
+        threat_name = threat_name_map.get(threat_id, "")
+        toe_cfg = threat_toe_config_map.get(threat_id, "")
+
+        for ds_id in ds_list:
+            ds_id = ds_id.strip()
+            ds_full = f"{ds_id}::{damage_scenario_map.get(ds_id, '')}"
+            key = (threat_id, ds_id)
+
+            if key in existing_pairs:
+                ts = existing_pairs[key]
+                # ✅ Update existing record using ts_id (not uuid)
+                update_instance(
+                    ThreatScenarios,
+                    {'ts_id': ts.ts_id},
+                    {
+                        'ds_id': ds_full,
+                        'toe_configuration_id': toe_cfg,
+                        'reasoning': ts.reasoning or '',
+                        'comments': ts.comments or '',
+                        'updated_by': 'system',
+                        'is_deleted': "False"
+                    }
+                )
+                logger.info(f"🔁 Updated ThreatScenario: {ts.ts_id} → [{threat_id} / {ds_id}]")
+            else:
+                # ✅ Create new record with new ts_id
+                new_ts = ThreatScenarios(
+                    ts_id=generate_unique_ts_id(),
+                    threat_id=threat_id,
+                    ds_id=ds_full,
+                    toe_configuration_id=toe_cfg,
+                    reasoning='',
+                    comments='',
+                    created_by='system',
+                    updated_by='system',
+                    is_deleted="False"
+                )
+                create_instance(new_ts)
+                logger.info(f"➕ Inserted new ThreatScenario → [{threat_id} / {ds_id}]")
+
+    logger.info("✅ ThreatScenarios sync complete.")
 
 
 def sync_attack_tree_with_threats():
@@ -316,20 +332,23 @@ def sync_attack_tree_with_threats():
             logger.info(f"🗑️ Deleted orphaned attack_tree_home row for threat_id: {ath_id}")
 
 
+last_threat_number = None  # 🔁 Global tracker for threat ID
+
 def threat_generate_id():
-    logger.info("Generating new Threat ID")
-    try:
-        # Get max suffix from both threat and threat_trash tables
-        max_in_threat = get_max_numeric_suffix(Threats, 'threat_id', prefix="TH")
-        #max_in_trash = get_max_numeric_suffix(ThreatTrash, 'threat_id', prefix="TH")
+    """
+    Generates a new Threat ID using the last known numeric suffix, initializing lazily.
+    Format: TH-<number>
+    """
+    global last_threat_number
 
-        max_suffix = max(max_in_threat)
-        new_id = f"TH-{max_suffix + 1}"
-        return new_id
+    if last_threat_number is None:
+        # Lazy load the highest existing threat number from DB
+        last_threat_number = get_max_numeric_suffix("threats", "threat_id", prefix="TH")
+        if last_threat_number is None:
+            last_threat_number = 0
 
-    except Exception as e:
-        logger.exception("Error generating Threat ID")
-        return ""
+    last_threat_number += 1
+    return f"TH-{last_threat_number}"
 
 def sync_assumptions_with_securityClaims():
     logger.info("🔄 Syncing assumptions with SecurityClaims and RiskControlTreeHome")

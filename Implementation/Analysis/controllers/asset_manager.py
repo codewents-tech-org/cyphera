@@ -4,11 +4,12 @@ import logging
 from collections import OrderedDict
 # --- Add to asset_manager.py (top) ---
 from controllers.schema_manager import bulk_update_instances, get_max_numeric_suffix
-
+import Analysis.models.analysis_synchronization as AS
 from controllers.schema_manager import (
     get_instances, get_first_instance, update_instance, create_instance, delete_instance
 )
 from controllers.database_tables.analysis_tables import Assets
+import Target_Of_Evaluation.Scope.controllers.scope_synchronizations as TSS
 
 logger = logging.getLogger("asset_manager")
 
@@ -49,7 +50,8 @@ def update_asset(asset_id, updates: dict):
 
 def persist_asset_changes():
     """
-    Saves all changed (not deleted) asset records in cache to DB (bulk update).
+    Saves all changed (not deleted) asset records in cache to DB (bulk update),
+    and triggers all downstream threat syncing and tree updates.
     """
     updates = []
     for asset_id, entry in ASSET_CACHE.items():
@@ -61,12 +63,28 @@ def persist_asset_changes():
                 'security_properties': obj.security_properties,
                 'description': obj.description,
                 'comments': obj.comments,
-                # add other fields as needed
             })
             entry['changed'] = False
+
     if updates:
-        bulk_update_instances(Assets, updates, filter_key="asset_id")  # ✅ FIXED
+        bulk_update_instances(Assets, updates, filter_key="asset_id")
         logger.info(f"🔄 Updated {len(updates)} assets in DB.")
+    else:
+        logger.info("✅ No asset changes to persist.")
+
+    # 🔁 Trigger all sync operations as part of post-submit logic
+    AS.sync_threats_with_assets()
+    # AS.update_threatscenario_from_threat()
+    # AS.update_risktreatement_data()
+    # AS.remove_orphaned_attack_tree_rows()
+    # AS.update_attack_tree_text()
+    # AS.sync_attack_tree_with_threats()
+    # AS.remove_nonexistent_threat_scenarios_from_Risk_data()
+    # TSS.update_scope_threats()
+
+    logger.info("✅ Asset-related sync operations completed.")
+
+
 
 
 def refresh_assets_cache():

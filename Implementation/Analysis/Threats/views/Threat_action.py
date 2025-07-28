@@ -101,6 +101,9 @@ from components.loading_dialog import RoundLoader
 from controllers.database_tables.target_of_evaluation_tables import Misusecases  # adjust import
 from controllers.database_tables.analysis_tables import DamageScenarios  # adjust import to your model
 from controllers.database_tables.target_of_evaluation_tables import TOEConfiguration  # adjust import
+from components.table.multiselect_combo import MultiSelectComboSelector
+
+
 class Threat_Module(QWidget):
     create_property_panel_signal = pyqtSignal()
     create_property_layout_signal = pyqtSignal()
@@ -258,70 +261,139 @@ class Threat_Module(QWidget):
         self.submit_button.setEnabled(row_count > 0)
 
     def load_data(self):
-        # Show loader
+        # ✅ Show loading animation
         self.loader = RoundLoader(self, label_text="Loading...")
         self.loader.show()
         QApplication.processEvents()
 
-        # --- Populate select options (as you have) ---
-        # Damage Scenarios
-        damage_scenarios_options = [
+        # ✅ 1. Populate dropdown options
+        self.damage_scenarios_option_list = [
             f"{ds.ds_id}::{ds.name}" for ds in get_instances(DamageScenarios)
         ]
-        self.threat_damage_scenarios_input.additem(damage_scenarios_options)
+        self.threat_damage_scenarios_input.additem(self.damage_scenarios_option_list)
         self.threat_damage_scenarios_input.set_text('')
-        self.damage_scenarios_option_list = damage_scenarios_options
 
-        # TOE Config
-        toe_configuration_options = [
+        self.toe_configuration_option_list = [
             f"{toec.toe_configuration_id}::{toec.toe_configuration_name}" for toec in get_instances(TOEConfiguration)
         ]
-        self.threat_toe_configuration_input.additem(toe_configuration_options)
+        self.threat_toe_configuration_input.additem(self.toe_configuration_option_list)
         self.threat_toe_configuration_input.set_text('')
-        self.toe_configuration_option_list = toe_configuration_options
 
-        # Misuse Cases
-        misuse_cases_options = [
+        self.misuse_cases_option_list = [
             f"{ms.misuse_cases_id}::{ms.misuse_cases_name}" for ms in get_instances(Misusecases)
         ]
-        self.threat_misuse_cases_input.additem(misuse_cases_options)
+        self.threat_misuse_cases_input.additem(self.misuse_cases_option_list)
         self.threat_misuse_cases_input.set_text('')
-        self.misuse_cases_option_list = misuse_cases_options
 
-        # ---- TABLE POPULATION ----
+        # ✅ 2. Define mapping from UI headers → DB fields (used in table)
+        self.threat_column_field_map = {
+            "ID": "threat_id",
+            "Name": "name",
+            "Damage Scenarios": "ds_id",
+            "TOE Configuration": "toe_configuration_id",
+            "Misuse cases": "misuse_cases_id",
+            "Initial AFR": "initia_afr",
+            "Resid AFR": "resid_afr",
+            "Asset": "asset_id",
+            "Security Properties": "security_properties",
+            "Reasoning": "reasoning",
+            "Comments": "comments"
+        }
+
+        # ✅ 3. Specify which columns are dropdowns
+        self.threat_dropdown_columns = {
+            "Damage Scenarios": self.damage_scenarios_option_list,
+            "TOE Configuration": self.toe_configuration_option_list,
+            "Misuse cases": self.misuse_cases_option_list
+        }
+
+        threat_headers = list(self.threat_column_field_map.keys())  # Ordered list of headers
+
+        # ✅ 4. Load threats from DB
+        print("🔄 Loading threat records...")
         self.table.setRowCount(0)
-        threats = load_all_threats()  # List of Threats ORM records
+        threats = load_all_threats()
+
         for row_idx, threat in enumerate(threats):
             self.table.insertRow(row_idx)
-            # Fill your table columns and widgets as needed. Example:
-            self.table.setItem(row_idx, 1, QTableWidgetItem(threat.threat_id))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(threat.name))
-            # MultiSelect for columns 3-5, as in your logic above
-            self.row_uuid_map[row_idx] = threat.uuid  # ✅ Store uuid for this row!
-            # Optionally store the uuid → row mapping for later updates
 
+            for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
+                field = self.threat_column_field_map[header]
+                value = getattr(threat, field, "") or ""
+
+                if header in self.threat_dropdown_columns:
+                    options = self.threat_dropdown_columns[header]
+                    self.add_multiselect_to_table_cell(row_idx, col_idx, options, value, field)
+                else:
+                    self.table.setItem(row_idx, col_idx, QTableWidgetItem(value))
+
+            # Map row to UUID for later updates
+            self.row_uuid_map[row_idx] = threat.uuid
+
+        # ✅ 5. Final cleanup
         interfaces.unsaved_changes = False
         self.loader.close()
+        print("✅ Threat table loaded successfully.")
+
+
+
 
 
     def refresh_data(self):
         refresh_threats_cache()  # Clear and reload manager cache from DB
         self.load_data()      
+   
     def submit_changes(self):
+        """
+        Collects all table data, updates the threat cache, and persists to DB.
+        Uses column mapping based on header definitions.
+        """
         self.table.setFocus()
         self.update_button_states()
-        # For each table row, extract values and call update_threat
+        print("🚨 Submit button clicked")
+
+        # ✅ Column index → DB field mapping
+        column_field_map = {
+            1: "threat_id",
+            2: "name",
+            3: "ds_id",  # ✅ Correct field for Damage Scenarios
+            4: "toe_configuration_id",  # ✅ Correct field for TOE
+            5: "misuse_cases_id",  # ✅ Correct field for Misuse Cases
+            6: "initia_afr",  # ✅ matches model
+            7: "resid_afr",   # ✅ matches model
+            8: "asset_id",    # ✅ matches model
+            9: "security_properties",
+            10: "reasoning",
+            11: "comments"
+        }
+
         for row in range(self.table.rowCount()):
             uuid = self.row_uuid_map.get(row)
             if not uuid:
                 continue
-            update_dict = {
-                "name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                # ... all other fields, including those from comboboxes
-            }
-            update_threat(uuid, update_dict)
+
+            update_dict = {}
+            for col, field in column_field_map.items():
+                widget = self.table.cellWidget(row, col)
+                if widget and hasattr(widget, "selected_items"):
+                    value = ", ".join(widget.selected_items())
+                else:
+                    item = self.table.item(row, col)
+                    value = item.text() if item else ""
+
+                update_dict[field] = value
+
+            changed = update_threat(uuid, update_dict)
+            if changed:
+                print(f"✅ Updated threat instance → {uuid}")
+            else:
+                print(f"🟡 No changes for threat → {uuid}")
+
         persist_threat_changes()
+        print("🗃️ All changes persisted to DB")
         interfaces.unsaved_changes = False
+
+
 
 
     def on_threat_property_name_changed(self): PVD.on_property_multiline_changed(self.table, 2, self.threat_name_input)
@@ -396,35 +468,7 @@ class Threat_Module(QWidget):
         print(f"[TARA] 🔔 Threat Save Signal Received → {payload}")
 
     def display_row_data_in_panel(self, data):
-        """
-        Loads selected row data into the threat property panel.
-
-        Delegates the task of setting values in the UI components to the utility function
-        `threat_display_selected_row`, passing along dynamic configuration options.
-
-        Parameters:
-        -----------
-        data : dict
-            Dictionary emitted from row selection with a structure like:
-            {
-                "sender": "Table",
-                "event": "row_selected",
-                "data": {
-                    "ID": "...",
-                    "Name": "...",
-                    ...
-                }
-            }
-
-        Effects:
-        --------
-        - Fills property panel widgets with values from the selected table row.
-        - Applies special handling for multiselect fields using option lists.
-
-        See Also:
-        ---------
-        - PVD.threat_display_selected_row
-        """
+   
         PVD.threat_display_selected_row(
             self.table,
             self.threat_property_controls,
@@ -435,7 +479,38 @@ class Threat_Module(QWidget):
             self.property_panel_manager.toggle_button
         )
     
-    
+    def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
+        """
+        Generic helper for adding MultiSelectComboSelector to Threats table.
+
+        Args:
+            row_index (int): Table row index.
+            column_index (int): Table column index.
+            option_list (list[str]): List of selectable options.
+            current_value (str): Pre-selected value from DB (comma-separated string).
+            update_field (str): Field to update in backend via `update_threat`.
+
+        """
+        combo = MultiSelectComboSelector(option_list, placeholder="Select")
+        
+        # Set pre-selected items
+        if current_value:
+            if isinstance(current_value, str):
+                selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
+            else:
+                selected_items = current_value
+            combo.set_selected_items(selected_items)
+
+        def on_selection_change():
+            value = ", ".join(combo.selected_items())
+            self.table.setItem(row_index, column_index, QTableWidgetItem(value))
+            uuid = self.row_uuid_map.get(row_index)
+            if uuid:
+                update_threat(uuid, {update_field: value})
+                interfaces.unsaved_changes = True
+
+        combo.model().dataChanged.connect(on_selection_change)
+        self.table.setCellWidget(row_index, column_index, combo)
         
 
 
