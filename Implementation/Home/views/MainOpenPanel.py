@@ -285,6 +285,16 @@ class MainOpen_Panel(QWidget):
 
         # 6. Set first/default button as active by default
         interfaces.sub_modules[interfaces.default_modules["module"]["name"]]["current_submodule"] = interfaces.default_modules["submodule"]["name"]
+        interfaces.previous_mainmodule = interfaces.default_modules["module"]["name"]
+        try:
+            module_name = interfaces.default_modules["module"]["name"]
+            submodule_name = interfaces.default_modules["submodule"]["name"]
+            interfaces.previous_module = interfaces.sub_modules[module_name]["submodules"][submodule_name]["frame"]
+        except KeyError as e:
+            print(f"[ERROR] Could not fetch previous_module frame: {e}")
+            interfaces.previous_module = None
+
+
         interfaces.default_modules["module"]["module_button"].on_click()
         interfaces.default_modules["module"]["module_action"]()
         interfaces.default_modules["submodule"]["submodule_button"].on_click()
@@ -361,6 +371,16 @@ class MainOpen_Panel(QWidget):
 
         # 7. Set first/default button as active by default
         interfaces.sub_modules[interfaces.default_modules["module"]["name"]]["current_submodule"] = interfaces.default_modules["submodule"]["name"]
+        interfaces.previous_mainmodule = interfaces.default_modules["module"]["name"]
+        try:
+            module_name = interfaces.default_modules["module"]["name"]
+            submodule_name = interfaces.default_modules["submodule"]["name"]
+            interfaces.previous_module = interfaces.sub_modules[module_name]["submodules"][submodule_name]["frame"]
+        except KeyError as e:
+            print(f"[ERROR] Could not fetch previous_module frame: {e}")
+            interfaces.previous_module = None
+
+
         interfaces.default_modules["module"]["module_button"].on_click()
         interfaces.default_modules["module"]["module_action"]()
         interfaces.default_modules["submodule"]["submodule_button"].on_click()
