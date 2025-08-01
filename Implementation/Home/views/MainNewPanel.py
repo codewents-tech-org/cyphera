@@ -54,11 +54,9 @@ from dotenv import load_dotenv
 
 
 # Load .env from the current directory (or specify path as needed)
-env_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(env_path):
-    load_dotenv(dotenv_path=env_path)
-else:
-    print("[WARN] .env file not found; using default/fallback values.")
+from dotenv import load_dotenv
+load_dotenv()  # ✅ Loads from current working dir by default
+
 config_file_path = None  # Global project config path
 
 class MainNew_Panel(QWidget):

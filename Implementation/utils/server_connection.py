@@ -38,7 +38,9 @@ def check_server_and_license():
 
         return True, "Connected and verified"
     except Exception as e:
+        print(f"[ERROR] check_server_and_license(): {type(e).__name__} - {e}")
         return False, f"Server or license check failed: {e}"
+
 
 # utils/server_connection.py
 
