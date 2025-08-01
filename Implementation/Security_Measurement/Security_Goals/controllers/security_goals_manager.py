@@ -2,7 +2,7 @@ import uuid
 import logging
 from controllers.schema_manager import create_instance, get_instances, bulk_update_instances, get_max_numeric_suffix
 from controllers.tablemodel import SecurityGoals
-
+import Analysis.models.analysis_synchronization as AS
 logger = logging.getLogger(__name__)
 
 # In-memory cache: uuid -> { record, changed, deleted }
@@ -79,7 +79,9 @@ def delete_security_goal(uuid):
 
 def persist_security_goal_changes():
     """Bulk persist changes and deletions."""
+    print("-----------step3--------------")
     updates = []
+    print("-----------step4--------------")
     for uuid, entry in SECURITY_GOALS_CACHE.items():
         if not entry['changed']:
             continue
@@ -87,6 +89,7 @@ def persist_security_goal_changes():
         obj = entry['record']
         if entry['deleted']:
             updates.append({'uuid': uuid, 'is_deleted': True})
+            print("-----------step5--------------")
         else:
             updates.append({
                 'uuid': uuid,
@@ -104,6 +107,10 @@ def persist_security_goal_changes():
     if updates:
         bulk_update_instances(SecurityGoals, updates)
         logger.info(f"[✅] Persisted {len(updates)} SecurityGoal updates.")
+        
+        AS.remove_securityGoal_from_riskData()
+        AS.sync_securityGoals_from_securityControl()
+        
 
 # ========================== ID Helper ==========================
 

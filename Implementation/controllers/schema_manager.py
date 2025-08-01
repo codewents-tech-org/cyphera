@@ -458,3 +458,15 @@ def get_instances_like(model, column_name, like_pattern, extra_filters=None, ses
             getattr(obj, col.key)
         session.expunge(obj)
     return results
+
+def safe_get_instances(model, filters=None):
+    """
+    Wrapper around get_instances that removes 'is_deleted' for models that don't support it.
+    """
+    filters = filters or {}
+
+    if model.__name__ == "RiskData" and "is_deleted" in filters:
+        filters = {k: v for k, v in filters.items() if k != "is_deleted"}
+
+    return get_instances(model, filters)
+

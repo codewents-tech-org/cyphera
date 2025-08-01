@@ -8,9 +8,50 @@ from docx.shared import Pt
 from docx.oxml import OxmlElement
 import styles.tree_style as tree_style
 import ast
+from controllers.schema_manager import get_instances
+from controllers.tablemodel import AttackTree, RiskControlTree, Threats, RiskControlTreeHome
+from Attack_Paths.RiskControl_Tree.controllers.database_to_rct import build_rc_tree_json
+
+
+def flatten_node_tree(node, base_id):
+    flat_nodes = []
+    counter = {"index": 0}
+
+    def _walk(n, parent_id):
+        node_idx = counter["index"]
+        node_id = f"{base_id}_node_{node_idx}"
+        counter["index"] += 1
+
+        # Base node structure
+        flat_node = {
+            "node_id": node_id,
+            "parent_id": parent_id,
+            "node_type": n.get("node_type"),
+            "node_label": n.get("node_label"),
+            "node_Text": n.get("node_Text"),
+            "af_value": n.get("af_value", ''),
+            "af_level": n.get("af_level", ''),
+            "gate": n.get("gate", ''),
+            "values": n.get("values", [])
+        }
+
+        flat_nodes.append(flat_node)
+
+        # Recurse into children
+        for child in n.get("childrens", []):
+            _walk(child, node_id)
+
+    _walk(node, parent_id=None)
+    return flat_nodes
 
 def Update_RiskControlTree_Dictionary(document):
-    risk_control_rows = DB.execute_db("""SELECT id, name FROM riskcontrol_tree_home""")
+    # risk_control_rows = DB.execute_db("""SELECT id, name FROM riskcontrol_tree_home""")
+    risk_control_rows = []
+    rct_data = get_instances(RiskControlTreeHome, {'is_deleted':False})
+    if rct_data:
+        for instance in rct_data:
+            risk_control_rows.append(tuple([instance.id, instance.name]))
+    print(risk_control_rows)
     risk_control_id_list = set()
     risk_control_map = {}
     if risk_control_rows: 
@@ -19,7 +60,23 @@ def Update_RiskControlTree_Dictionary(document):
             risk_control_map[risk_control_id] = risk_control_name
     # document = Document()
     for risk_control_id in risk_control_id_list:
-        risk_control_tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM riskcontrol_tree WHERE Node_ID like '{risk_control_id}_Node%'""")
+        # risk_control_tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM riskcontrol_tree WHERE Node_ID like '{risk_control_id}_Node%'""")
+        risk_control_tree_rows = []
+        tree_nodes = get_instances(RiskControlTree, {'tree_id':risk_control_id, 'is_deleted':False})
+        print(tree_nodes)
+        rc_tree_nodes = []
+        if tree_nodes:
+            rct_json_tree = build_rc_tree_json(tree_nodes)
+            print(rct_json_tree)
+            rct_list_tree = flatten_node_tree(rct_json_tree, risk_control_id)
+            print("------------------------------------risk control tree list--------------------------------")
+            print(rct_list_tree)
+            
+            for node in rct_list_tree:
+                node_data = [node['node_id'], node['parent_id'], node['node_type'], node['node_Text'], node['af_value'], node['af_level'], node['gate'], node['values']]
+                rc_tree_nodes.append(tuple(node_data))
+            print(rc_tree_nodes)
+            risk_control_tree_rows.extend(rc_tree_nodes)
         # print(risk_control_tree_rows)
         if risk_control_tree_rows:
             riskcontrol_trees = Generate_tree_dictionary(risk_control_id, risk_control_tree_rows) 
@@ -70,7 +127,23 @@ def Generate_tree_dictionary(risk_control_id, tree_rows):
     return tree_dictionary
 
 def generate_word_report(risk_control_id, risk_control_name, output_path, Document):
-    tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM riskcontrol_tree WHERE Node_ID like '{risk_control_id}_Node%'""")
+    # tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM riskcontrol_tree WHERE Node_ID like '{risk_control_id}_Node%'""")
+    tree_rows = []
+    tree_nodes = get_instances(RiskControlTree, {'tree_id':risk_control_id, 'is_deleted':False})
+    print(tree_nodes)
+    rc_tree_nodes = []
+    if tree_nodes:
+        rct_json_tree = build_rc_tree_json(tree_nodes)
+        print(rct_json_tree)
+        rct_list_tree = flatten_node_tree(rct_json_tree, risk_control_id)
+        print("------------------------------------risk control tree list--------------------------------")
+        print(rct_list_tree)
+        
+        for node in rct_list_tree:
+            node_data = [node['node_id'], node['parent_id'], node['node_type'], node['node_Text'], node['af_value'], node['af_level'], node['gate'], node['values']]
+            rc_tree_nodes.append(tuple(node_data))
+        print(rc_tree_nodes)
+        tree_rows.extend(rc_tree_nodes)
     if not tree_rows:
         print(f"No data found for risk_control ID: {risk_control_id}")
         return
@@ -129,7 +202,7 @@ def generate_word_report(risk_control_id, risk_control_name, output_path, Docume
             node_color = 'FFFFFF'
             if child_node['node_type'] == 'intermediate':
                 node_color = tree_style.intermediatenode_sidebar_color
-            elif child_node['node_type'] == 'riskcontrol head':
+            elif child_node['node_type'] == 'control head':
                 node_color = tree_style.controlnode_sidebar_color
             elif child_node['node_type'] == 'technical head':
                 node_color = tree_style.technicalnode_sidebar_color

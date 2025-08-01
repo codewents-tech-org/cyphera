@@ -81,7 +81,7 @@ import Analysis.controllers.analysis_TableSaveRecord as TSR
 import Analysis.controllers.analysis_TableRefreshRecord as TFR 
 import Analysis.controllers.analysis_PropertyValueDisplay as PVD
 from Analysis.Asset.views.asset_toolbar_panel import create_toolbar
-
+import components.table.table_row_indicator as TRI
 from Analysis.controllers.asset_manager import ASSET_CACHE, add_new_asset, delete_asset, generate_new_asset_id, is_asset_name_duplicate, load_all_assets, persist_asset_changes, update_asset
 from controllers.database_tables.analysis_tables import Assets
 import controllers.TableValueHighlight as TVH
@@ -209,6 +209,8 @@ class Asset_Module(QWidget):
         for row_index, asset in enumerate(assets):
             try:
                 self.table.insertRow(row_index)
+                is_selected = (row_index == self.table.currentRow())
+                self.table.setCellWidget(row_index, 0, TRI.SidebarWidget(row_idx=row_index, selected=is_selected))
                 self.table.setItem(row_index, 1, QTableWidgetItem(asset.asset_id))
                 self.table.setItem(row_index, 2, QTableWidgetItem(asset.name))
                 self.add_multiselect_to_security_property_cell(row_index, asset.security_properties)
@@ -232,30 +234,31 @@ class Asset_Module(QWidget):
         Handles row selection:
         - Emits structured row data
         - Highlights only the selected row's sidebar indicator (dot)
+        - Updates property panel and button states
         """
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
 
-        selected_row = self.table.currentRow()
-        row_count = self.table.rowCount()
+        current_row = self.table.currentRow()
+        total_rows = self.table.rowCount()
 
-        print("🔄 Row selection changed →", selected_row)
+        # ✅ Highlight dot indicator on the selected row
+        for row in range(total_rows):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
 
-        # ✅ Loop all rows and update sidebar indicators
-        for row in range(row_count):
-            sidebar_widget = self.table.cellWidget(row, 0)
-            if sidebar_widget and hasattr(sidebar_widget, "set_selected"):
-                sidebar_widget.set_selected(row == selected_row)
-                print(f"   - Row {row} → {'✅ selected' if row == selected_row else '⬜ not selected'}")
+        # ✅ Load data into property panel
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
 
-        # ✅ Emit selected row data if valid
-        if selected_row >= 0:
+            # ✅ Emit structured signal with current row data
             data = {
-                "ID": self.table.item(selected_row, 1).text() if self.table.item(selected_row, 1) else "",
-                "Name": self.table.item(selected_row, 2).text() if self.table.item(selected_row, 2) else "",
-                "Security Properties": self.table.item(selected_row, 3).text() if self.table.item(selected_row, 3) else "",
-                "Description": self.table.item(selected_row, 4).text() if self.table.item(selected_row, 4) else "",
-                "Comments": self.table.item(selected_row, 5).text() if self.table.item(selected_row, 5) else "",
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Security Properties": ", ".join(self.table.cellWidget(current_row, 3).selected_items()) if self.table.cellWidget(current_row, 3) else "",
+                "Description": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
+                "Comments": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
             }
             payload = {
                 "sender": "Table",
@@ -264,6 +267,8 @@ class Asset_Module(QWidget):
             }
             self.row_selected.emit(payload)
 
+        # ✅ Refresh buttons
+        self.update_button_states()
         interfaces.unsaved_changes = temp
 
     def select_first_row(self): 
@@ -426,8 +431,17 @@ class Asset_Module(QWidget):
         PVD.on_property_multiline_changed(self.table, 2, self.asset_name_input)
 
     def on_asset_property_securityproperty_changed(self):
-        print("Security Property change fired:", ", ".join(self.asset_security_properties_input.selected_items() if hasattr(self.asset_security_properties_input, "selected_items") else []))
-        PVD.on_property_multiselect_changed(self.table, 3, self.asset_security_properties_input)
+        selected = self.asset_security_properties_input.selected_items()
+        value = ", ".join(selected)
+        row = self.table.currentRow()
+        if row >= 0:
+            combo = self.table.cellWidget(row, 3)
+            if isinstance(combo, MultiSelectComboSelector):
+                combo.set_selected_items(selected)
+            if row in self.row_id_map:
+                asset_id = self.row_id_map[row]
+                update_asset(asset_id, {"security_properties": value})
+                interfaces.unsaved_changes = True
 
     def on_asset_property_description_changed(self):
         PVD.on_property_multiline_changed(self.table, 4, self.asset_description_input)
@@ -445,31 +459,28 @@ class Asset_Module(QWidget):
 
     def build_property_panel(self):
         """
-        Dynamically builds the property input panel for Assets.
-
-        Uses PROPERTY_CONFIG to generate labeled input widgets.
-        - Initializes self.asset_property_controls
-        - Creates widget attributes like ASSET_name_input, etc.
-        - Also creates generic aliases like asset_name_input for signal compatibility
+        Dynamically builds the property input panel for Assets using PROPERTY_CONFIG.
         """
         self.property_factory = PropertyInputFactory()
         for field in PROPERTY_CONFIG:
-            label_key = field["label"].lower().replace(" ", "_")
+            label = field["label"]
+            input_type = field["type"]
+            signal_handler = getattr(self, field.get("signal")) if field.get("signal") else None
+            items = field.get("items", None)
+            is_readonly = field.get("readonly", False)
+
             input_widget = self.property_factory.create_common_property_input(
-                field["label"],
-                field["type"],
-                self.property_layout,
-                self.asset_property_controls,
-                getattr(self, field.get("signal")) if field.get("signal") else None,
-                field.get("items")
+                label_text=label,
+                input_type=input_type,
+                layout=self.property_layout,
+                controls_list=self.asset_property_controls,
+                signal=signal_handler,
+                items=items,
+                setReadOnly=is_readonly
             )
 
-            if field.get("readonly"):
-                input_widget.setReadOnly(True)
-
-            # ✅ Assign both ASSET_* and asset_* attributes
-           
-            setattr(self, f'asset_{label_key}_input', input_widget)
+            label_key = label.lower().replace(" ", "_")
+            setattr(self, f"asset_{label_key}_input", input_widget)
 
         if SAVE_BUTTON.get("enabled"):
             self.save_button = self.property_factory.create_save_button(
@@ -490,57 +501,44 @@ class Asset_Module(QWidget):
     def display_row_data_in_panel(self, data):
         """
         Loads and displays the selected table row's data into the property panel.
-
-        Clears each input field if the corresponding table cell is empty or uninitialized.
-        Then populates the property panel using the current row data.
-
-        See Also:
-        ---------
-        - PVD.asset_display_selected_row
+        Clears and then sets each input field based on the current table row.
         """
         print("[DEBUG] display_row_data_in_panel called with:", data)
         row = self.table.currentRow()
+        if row < 0:
+            return
 
         for i, (label, widget) in enumerate(self.asset_property_controls):
-            table_item = self.table.item(row, i + 1)
-            cell_widget = self.table.cellWidget(row, i + 1)
+            col = i + 1  # Column index in the table
+            table_item = self.table.item(row, col)
+            cell_widget = self.table.cellWidget(row, col)
 
-            should_clear = False
+            # 🔁 For multi-select / combo boxes
+            if hasattr(widget, "set_selected_items"):
+                text = table_item.text() if table_item else ""
+                selected = [x.strip() for x in text.split(",")] if text else []
+                widget.set_selected_items(selected)
 
-            if hasattr(widget, "selected_items") or hasattr(widget, "get_selected_items"):
-                if not (hasattr(cell_widget, "selected_items") and cell_widget.selected_items()):
-                    should_clear = True
-                if should_clear:
-                    if hasattr(widget, "set_selected_items"):
-                        widget.set_selected_items([])
-                    elif hasattr(widget, "set_text"):
-                        widget.set_text("")
-                continue
+            # 🔁 For plain text fields
+            elif hasattr(widget, "setText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setText(value)
 
+            elif hasattr(widget, "setPlainText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setPlainText(value)
 
-            # Standard text/combo widgets
-            if table_item is None or not table_item.text().strip():
-                should_clear = True
+            elif hasattr(widget, "setCurrentText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setCurrentText(value)
 
-            if should_clear:
-                if hasattr(widget, "set_text"):
-                    widget.set_text("")
-                elif hasattr(widget, "setPlainText"):
-                    widget.setPlainText("")
-                elif hasattr(widget, "setText"):
-                    widget.setText("")
-                elif hasattr(widget, "setCurrentText"):
-                    widget.setCurrentText("")
-                elif hasattr(widget, "clear"):
-                    widget.clear()
+            elif hasattr(widget, "set_text"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.set_text(value)
 
-        # Populate data from table
-        PVD.asset_display_selected_row(
-            self.table,
-            self.asset_property_controls,
-            self.panel_manager.property_panel,
-            self.panel_manager.toggle_button
-        )
+        # Optional: visually open the property panel
+        if self.panel_manager.toggle_button and not self.panel_manager.toggle_button.isChecked():
+            self.panel_manager.toggle_button.click()
 
     def add_multiselect_to_security_property_cell(self, row_index, current_value=None):
         from models.helper import asset_security_properties_menu

@@ -316,6 +316,7 @@ class Threat_Module(QWidget):
 
         for row_idx, threat in enumerate(threats):
             self.table.insertRow(row_idx)
+            
 
             for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
                 field = self.threat_column_field_map[header]
@@ -334,10 +335,6 @@ class Threat_Module(QWidget):
         interfaces.unsaved_changes = False
         self.loader.close()
         print("✅ Threat table loaded successfully.")
-
-
-
-
 
     def refresh_data(self):
         refresh_threats_cache()  # Clear and reload manager cache from DB
@@ -397,9 +394,36 @@ class Threat_Module(QWidget):
 
 
     def on_threat_property_name_changed(self): PVD.on_property_multiline_changed(self.table, 2, self.threat_name_input)
-    def on_threat_property_DS_changed(self): PVD.on_property_multiselect_changed(self.table, 3, self.threat_damage_scenarios_input)
-    def on_threat_property_toec_changed(self): PVD.on_property_multiselect_changed(self.table, 4, self.threat_toe_configuration_input)
-    def on_threat_property_MS_changed(self): PVD.on_property_multiselect_changed(self.table, 5, self.threat_misuse_cases_input)
+    def on_threat_property_DS_changed(self):
+        PVD.on_property_multiselect_changed(self.table, 3, self.threat_damage_scenarios_input)
+
+        row = self.table.currentRow()
+        if row >= 0 and row in self.row_uuid_map:
+            uuid = self.row_uuid_map[row]
+            value = ", ".join(self.threat_damage_scenarios_input.selected_items())
+            update_threat(uuid, {"ds_id": value})
+            interfaces.unsaved_changes = True
+
+    def on_threat_property_toec_changed(self):
+        PVD.on_property_multiselect_changed(self.table, 4, self.threat_toe_configuration_input)
+
+        row = self.table.currentRow()
+        if row >= 0 and row in self.row_uuid_map:
+            uuid = self.row_uuid_map[row]
+            value = ", ".join(self.threat_toe_configuration_input.selected_items())
+            update_threat(uuid, {"toe_configuration_id": value})
+            interfaces.unsaved_changes = True
+
+    def on_threat_property_MS_changed(self):
+        PVD.on_property_multiselect_changed(self.table, 5, self.threat_misuse_cases_input)
+
+        row = self.table.currentRow()
+        if row >= 0 and row in self.row_uuid_map:
+            uuid = self.row_uuid_map[row]
+            value = ", ".join(self.threat_misuse_cases_input.selected_items())
+            update_threat(uuid, {"misuse_cases_id": value})
+            interfaces.unsaved_changes = True
+
     def on_threat_property_asset_changed(self): PVD.on_property_line_changed(self.table, 8, self.threat_asset_input)
     def on_threat_property_securityproperty_changed(self): PVD.on_property_line_changed(self.table, 9, self.threat_security_input)
     def on_threat_property_reasoning_changed(self): PVD.on_property_multiline_changed(self.table, 10, self.threat_reasoning_input)
@@ -416,40 +440,30 @@ class Threat_Module(QWidget):
         """
         Dynamically constructs the property input panel for Threats.
 
-        Reads the `PROPERTY_CONFIG` to generate input widgets, assigns them to the
-        property layout, binds signal handlers, and saves references for later access.
-        Also adds a Save button if enabled in `SAVE_BUTTON` config.
-
-        Effects:
-        --------
-        - Initializes `self.threat_property_controls` with label-widget pairs.
-        - Dynamically assigns instance attributes like `self.threat_name_input`.
-        - Creates and wires a Save button that emits `property_save_clicked`.
-
-        Signals:
-        --------
-        - property_save_clicked: Emitted with a structured payload when Save is clicked.
-
-        See Also:
-        ---------
-        - PropertyInputFactory.create_common_property_input
-        - PropertyInputFactory.create_save_button
-        - threats_config.PROPERTY_CONFIG
+        Uses PROPERTY_CONFIG to render input widgets and bind signal handlers.
+        Applies read-only state if configured, and attaches save button logic.
         """
         self.property_factory = PropertyInputFactory()
+
         for field in PROPERTY_CONFIG:
+            label = field["label"]
+            input_type = field["type"]
+            signal_handler = getattr(self, field.get("signal")) if field.get("signal") else None
+            items = field.get("items", None)
+            readonly = field.get("readonly", False)
+
             input_widget = self.property_factory.create_common_property_input(
-                field["label"],
-                field["type"],
-                self.property_layout,
-                self.threat_property_controls,
-                getattr(self, field.get("signal")) if field.get("signal") else None,
-                field.get("items")
+                label_text=label,
+                input_type=input_type,
+                layout=self.property_layout,
+                controls_list=self.threat_property_controls,
+                signal=signal_handler,
+                items=items,
+                setReadOnly=readonly
             )
 
-            if field.get("readonly"):
-                input_widget.setReadOnly(True)
-            setattr(self, f'threat_{field["label"].lower().replace(" ", "_")}_input', input_widget)
+            attr_name = f"threat_{label.lower().replace(' ', '_')}_input"
+            setattr(self, attr_name, input_widget)
 
         if SAVE_BUTTON.get("enabled"):
             self.save_button = self.property_factory.create_save_button(
@@ -463,22 +477,64 @@ class Threat_Module(QWidget):
 
         self.property_save_clicked.connect(self.handle_property_save_signal)
 
-
     def handle_property_save_signal(self, payload):
         print(f"[TARA] 🔔 Threat Save Signal Received → {payload}")
 
     def display_row_data_in_panel(self, data):
-   
-        PVD.threat_display_selected_row(
-            self.table,
-            self.threat_property_controls,
-            self.damage_scenarios_option_list,
-            self.toe_configuration_option_list,
-            self.misuse_cases_option_list,
-            self.property_panel_manager.property_panel,
-            self.property_panel_manager.toggle_button
-        )
-    
+        print("[DEBUG] display_row_data_in_panel called with:", data)
+        row = self.table.currentRow()
+        if row < 0:
+            return
+
+        # Map each field to its actual column index in the table
+        label_column_map = {
+            "ID": 1,
+            "Name": 2,
+            "Damage Scenarios": 3,
+            "TOE Configuration": 4,
+            "Misuse Cases": 5,
+            "Asset": 8,
+            "Security Property": 9,
+            "Reasoning": 10,
+            "Comments": 11,
+        }
+
+        for label, widget in self.threat_property_controls:
+            col = label_column_map.get(label)
+            if col is None:
+                continue
+
+            table_item = self.table.item(row, col)
+            cell_widget = self.table.cellWidget(row, col)
+
+            # Multi-select
+            if hasattr(widget, "set_selected_items"):
+                text = table_item.text() if table_item else ""
+                selected_items = [x.strip() for x in text.split(",") if x.strip()]
+                widget.set_selected_items(selected_items)
+
+            # Dropdown/single line
+            elif hasattr(widget, "setCurrentText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setCurrentText(value)
+
+            # Plain text
+            elif hasattr(widget, "setText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setText(value)
+
+            elif hasattr(widget, "setPlainText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setPlainText(value)
+
+            elif hasattr(widget, "set_text"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.set_text(value)
+
+        # Expand panel if hidden
+        if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
+            self.property_panel_manager.toggle_button.click()
+
     def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
         """
         Generic helper for adding MultiSelectComboSelector to Threats table.

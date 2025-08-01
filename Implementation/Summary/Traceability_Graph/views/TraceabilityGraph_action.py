@@ -4,12 +4,15 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QSiz
 from PyQt5.QtGui import QPainter, QFont, QPen, QPainterPath, QColor, QPixmap, QBrush
 from PyQt5.QtCore import Qt, QPointF, QEvent
 import sqlite3
-from controllers.schema_manager import get_instances
+from controllers.schema_manager import get_instances,safe_get_instances
 import models.Parameters as P
 import models.helper as helper
 import controllers.DatabaseCreator as DB
 import Summary.Traceability_Graph.controllers.Traceability_customgraphics as TC
-
+from controllers.tablemodel import (
+    Threats, DamageScenarios, SecurityGoals, SecurityClaims,
+    SecurityControls, RiskData
+)
 from Summary.Traceability_Graph.views.traceabilitygraph_toolbar_panel import create_toolbar
 import styles.traceabilitygraph_panel_style as tree_panel_style
 import styles.action_panel_style as action_panel_style
@@ -138,12 +141,12 @@ class TraceabilityGraph_Module(QWidget):
         logger.info("Fetching Data for Traceability graph")
         try:
             # ORM fetches instead of direct SQL
-            threat_rows = get_instances(Threat)
-            damage_scenario_rows = get_instances(DamageScenario)
-            security_goals_rows = get_instances(SecurityGoal)
-            security_claims_rows = get_instances(SecurityClaim)
-            security_controls_rows = get_instances(SecurityControl)
-            risk_rows = get_instances(RiskData)
+            threat_rows = get_instances(Threats)
+            damage_scenario_rows = get_instances(DamageScenarios)
+            security_goals_rows = get_instances(SecurityGoals)
+            security_claims_rows = get_instances(SecurityClaims)
+            security_controls_rows = get_instances(SecurityControls)
+            risk_rows = safe_get_instances(RiskData)
             risk_data_rows = get_instances(RiskData)
 
             self.damage_scenarios_list = {row.ds_id: row.name for row in damage_scenario_rows}
@@ -151,63 +154,67 @@ class TraceabilityGraph_Module(QWidget):
             self.risk_list = {}
 
             for risk in risk_rows:
-                # adjust attributes according to your model
-                threat_id = risk.threat.strip().split(" - ")[0]
-                threat_name = risk.threat.strip().split(" - ")[1]
-                damage_id = risk.damage.strip().split(" - ")[0]
-                damage_name = risk.damage.strip().split(" - ")[1]
-                self.risk_list[f"{threat_id} {damage_id}"] = (damage_name, threat_name)
+                try:
+                    threat_raw = (risk.threat or '').strip()
+                    damage_raw = (risk.damage or '').strip()
+                    if " - " in threat_raw and " - " in damage_raw:
+                        threat_id, threat_name = threat_raw.split(" - ", 1)
+                        damage_id, damage_name = damage_raw.split(" - ", 1)
+                        self.risk_list[f"{threat_id} {damage_id}"] = (damage_name, threat_name)
+                except Exception as inner_e:
+                    logger.warning(f"Skipping malformed risk entry: {inner_e}")
 
-            self.security_goals_list = {row.id: row.name for row in security_goals_rows}
-            self.security_claims_list = {row.id: row.name for row in security_claims_rows}
-            self.security_controls_list = {row.id: row.name for row in security_controls_rows}
+            self.security_goals_list = {row.sg_id: row.name for row in security_goals_rows}
+            self.security_claims_list = {row.sc_id: row.name for row in security_claims_rows}
+            self.security_controls_list = {row.scc_id: row.name for row in security_controls_rows}
 
-            # You may need to do a double-loop or dict comprehension for these advanced joins
             self.security_goals_control_list = {}
             for sg in security_goals_rows:
                 control_lists = []
                 for sc in security_controls_rows:
-                    sg_data = getattr(sc, "properties", "")  # or correct field name
-                    sg_list = sg_data.strip().split(', ')
-                    sg_id_list = [sg_text.split('::')[0] for sg_text in sg_list]
-                    if sg.id in sg_id_list and sc.id not in control_lists:
-                        control_lists.append(sc.id)
-                self.security_goals_control_list[sg.id] = control_lists
+                    sg_data = getattr(sc, "properties", "") or ""
+                    sg_list = [item.strip() for item in sg_data.split(',') if item.strip()]
+                    sg_id_list = [entry.split("::")[0] for entry in sg_list]
+                    if sg.sg_id in sg_id_list and sc.scc_id not in control_lists:
+                        control_lists.append(sc.scc_id)
+                self.security_goals_control_list[sg.sg_id] = control_lists
 
             self.traceability_link = {}
             path_count = 0
             for risk in risk_data_rows:
-                damage_id = risk.damage.strip().split(' - ')[0]
-                threat_id = risk.threat.strip().split(' - ')[0]
-                claims_list = risk.security_claims.strip().split(', ') if risk.security_claims else []
-                goals_list = risk.security_goals.strip().split(', ') if risk.security_goals else []
-                controls_list = risk.mitigated_by.strip().split(', ') if risk.mitigated_by else []
+                try:
+                    damage_id = (risk.damage or '').strip().split(' - ')[0]
+                    threat_id = (risk.threat or '').strip().split(' - ')[0]
 
-                for goal, control_list in self.security_goals_control_list.items():
-                    if goal in goals_list:
-                        if len(control_list) > 0:
-                            for control in control_list:
+                    claims_list = [c.strip() for c in (risk.security_claims or '').split(',') if c.strip()]
+                    goals_list = [g.strip() for g in (risk.security_goals or '').split(',') if g.strip()]
+                    controls_list = [c.strip() for c in (risk.mitigated_by or '').split(',') if c.strip()]
+
+                    # Goal → Control links
+                    for goal, control_list in self.security_goals_control_list.items():
+                        if goal in goals_list:
+                            if control_list:
+                                for control in control_list:
+                                    self.traceability_link[f'path_{path_count}'] = {
+                                        'damage': damage_id,
+                                        'threat': threat_id,
+                                        'risk': f"{threat_id} {damage_id}",
+                                        'goal': goal,
+                                        'claim': '',
+                                        'control': control
+                                    }
+                                    path_count += 1
+                            else:
                                 self.traceability_link[f'path_{path_count}'] = {
                                     'damage': damage_id,
                                     'threat': threat_id,
                                     'risk': f"{threat_id} {damage_id}",
                                     'goal': goal,
                                     'claim': '',
-                                    'control': control
+                                    'control': ''
                                 }
                                 path_count += 1
                         else:
-                            self.traceability_link[f'path_{path_count}'] = {
-                                'damage': damage_id,
-                                'threat': threat_id,
-                                'risk': f"{threat_id} {damage_id}",
-                                'goal': goal,
-                                'claim': '',
-                                'control': ''
-                            }
-                            path_count += 1
-                    else:
-                        if len(control_list) > 0:
                             for control in control_list:
                                 self.traceability_link[f'path_{path_count}'] = {
                                     'damage': '',
@@ -218,20 +225,31 @@ class TraceabilityGraph_Module(QWidget):
                                     'control': control
                                 }
                                 path_count += 1
-                        else:
-                            self.traceability_link[f'path_{path_count}'] = {
-                                'damage': '',
-                                'threat': '',
-                                'risk': '',
-                                'goal': goal,
-                                'claim': '',
-                                'control': ''
-                            }
-                            path_count += 1
+                            if not control_list:
+                                self.traceability_link[f'path_{path_count}'] = {
+                                    'damage': '',
+                                    'threat': '',
+                                    'risk': '',
+                                    'goal': goal,
+                                    'claim': '',
+                                    'control': ''
+                                }
+                                path_count += 1
 
-                for sc_id in claims_list:
-                    if len(controls_list) > 0:
-                        for control in controls_list:
+                    # Claim → Control links
+                    for sc_id in claims_list:
+                        if controls_list:
+                            for control in controls_list:
+                                self.traceability_link[f'path_{path_count}'] = {
+                                    'damage': damage_id,
+                                    'threat': threat_id,
+                                    'risk': f"{threat_id} {damage_id}",
+                                    'goal': '',
+                                    'claim': sc_id,
+                                    'control': ''
+                                }
+                                path_count += 1
+                        else:
                             self.traceability_link[f'path_{path_count}'] = {
                                 'damage': damage_id,
                                 'threat': threat_id,
@@ -241,19 +259,11 @@ class TraceabilityGraph_Module(QWidget):
                                 'control': ''
                             }
                             path_count += 1
-                    else:
-                        self.traceability_link[f'path_{path_count}'] = {
-                            'damage': damage_id,
-                            'threat': threat_id,
-                            'risk': f"{threat_id} {damage_id}",
-                            'goal': '',
-                            'claim': sc_id,
-                            'control': ''
-                        }
-                        path_count += 1
+                except Exception as risk_e:
+                    logger.warning(f"Skipping bad risk row during traceability link generation: {risk_e}")
 
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error in fetch_data(): {e}")
 
     def create_Custom_Box(self, box_id='', text=''):
         # Create the outer frame for the custom box

@@ -90,7 +90,7 @@ import models.helper as helper
 import components.table.multioption_selector as MOS
 import components.table.table_row_indicator as TRI
 
-from controllers.schema_manager import get_instances
+from controllers.schema_manager import get_instances,safe_get_instances
 from controllers.tablemodel import SecurityClaims, Assumptions, TOEConfiguration, SecurityGoals,SecurityControls, RiskData, ThreatCatalog
 import models.helper as helper
 
@@ -340,8 +340,8 @@ def load_securitycontrols(self, table, property_panel, toggle_button):
 
         # Convert goals to display format
         security_property_list = [
-            f"{sg.id}::{sg.name}"
-            for sg in securitygoal_rows if sg.id and sg.name
+            f"{sg.sg_id}::{sg.name}"
+            for sg in securitygoal_rows if sg.sg_id and sg.name
         ]
 
         # If no data found
@@ -419,7 +419,7 @@ def load_risktreatement(self, table, property_panel, toggle_button):
         table.horizontalHeader().setStretchLastSection(True)
 
         # ORM Fetches
-        risk_data_rows = get_instances(RiskData, {'is_deleted': False})
+        risk_data_rows = safe_get_instances(RiskData, {'is_deleted': False})
         security_claims = get_instances(SecurityClaims, {'is_deleted': False})
         security_goals = get_instances(SecurityGoals, {'is_deleted': False})
         toe_configuration = get_instances(TOEConfiguration, {'is_deleted': False})

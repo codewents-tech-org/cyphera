@@ -1,17 +1,21 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QApplication, QMessageBox, QTableWidgetItem, QHBoxLayout
 )
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication, QComboBox, QMessageBox, QTableWidgetItem
 from PyQt5.QtCore import pyqtSignal
 
 from components.table.multiselect_combo import MultiSelectComboSelector
+from components.table import multiselect_combo as MOS
+from components.table.multioption_selector import TSMultiSelectComboBox
+
 from Security_Measurement.Security_Controls.views.securitycontrol_toolbar_panel import create_toolbar
 from Security_Measurement.Security_Controls.config.security_controls_config import PROPERTY_CONFIG, SAVE_BUTTON
 from Security_Measurement.Security_Controls.controllers import security_controls_manager as SCM
-
+from PyQt5.QtCore import pyqtSignal, Qt
 from controllers.tablemodel import SecurityGoals
 from controllers.schema_manager import get_instances
 import Analysis.models.analysis_synchronization as AS
-
+import components.table.table_row_indicator as TRI
 from styles.property_panel_style import property_save_button_style
 from components.propertypanel.property_input_components import PropertyInputFactory
 from components.propertypanel import property_panel_layout
@@ -26,6 +30,7 @@ import Risk_Assessment.controllers.riskassessment_PropertyValueDisplay as PVD
 import logging
 logger = logging.getLogger(__name__)
 
+
 class SecurityControls_Module(QWidget):
     create_property_panel_signal = pyqtSignal()
     property_save_clicked = pyqtSignal(dict)
@@ -33,14 +38,13 @@ class SecurityControls_Module(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.previous_text = ""
         self.init_ui()
 
     def init_ui(self):
         self.row_selected.connect(self.display_row_data_in_panel)
-
         self.property_panel_manager = property_panel_layout.PropertyPanelManager(self)
         self.property_panel_manager.create_property_panel()
-
         self.toggle_button = self.property_panel_manager.toggle_button
         self.property_panel = self.property_panel_manager.property_panel
         self.property_layout = self.property_panel_manager.property_layout
@@ -75,7 +79,6 @@ class SecurityControls_Module(QWidget):
         self.save_button.setEnabled(False)
 
         self.add_button.clicked.connect(self.add_new_entry)
-        print("[DEBUG] Connecting delete_button")
         self.delete_button.clicked.connect(self.delete_entry)
         self.submit_button.clicked.connect(self.submit_changes)
         self.save_button.clicked.connect(self.submit_changes)
@@ -104,21 +107,30 @@ class SecurityControls_Module(QWidget):
             self.table.itemChanged.disconnect(self.find_duplicates)
             rows = SCM.load_all_security_controls()
 
-            self.table.setRowCount(0)
+            
             for idx, obj in enumerate(rows):
                 self.table.insertRow(idx)
-                self.table.setItem(idx,1, QTableWidgetItem(obj.scc_id or ""))
+                is_selected = (idx == self.table.currentRow())
+                self.table.setCellWidget(idx, 0, TRI.SidebarWidget(row_idx=idx, selected=is_selected))
+
+                self.table.setItem(idx, 1, QTableWidgetItem(obj.scc_id or ""))
                 self.table.setItem(idx, 2, QTableWidgetItem(obj.name or ""))
 
-                # Multi-select for Security Goals
-                sg_combo = MultiSelectComboSelector(self.security_property_list, parent=self.table)
+                # ✅ SET SECURITY GOAL MULTISELECT
+                sg_combo = TSMultiSelectComboBox(self.security_property_list, parent=self.table)
                 selected_sgs = [s.strip() for s in (obj.security_goal_id or "").split(",") if s.strip()]
-                sg_combo.set_selected_items(selected_sgs)
+                sg_combo.set_text(selected_sgs)
                 sg_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
                 self.table.setCellWidget(idx, 3, sg_combo)
 
+                # ✅ CRITICAL: Also set string text directly to make it visible in display
+
+                # ✅ SET DESCRIPTION
                 self.table.setItem(idx, 4, QTableWidgetItem(obj.description or ""))
+
+                # ✅ SET COMMENTS
                 self.table.setItem(idx, 5, QTableWidgetItem(obj.comments or ""))
+
                 self.row_uuid_map[idx] = obj.uuid
 
 
@@ -126,60 +138,78 @@ class SecurityControls_Module(QWidget):
             interfaces.unsaved_changes = False
         finally:
             self.loader.close()
+            
+    
 
     def add_new_entry(self):
         self.table.setFocus()
-        self.table.itemChanged.disconnect(self.find_duplicates)
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except Exception:
+            pass
 
-        # --- 1. Add to DB/ORM/cache ---
-        obj = SCM.create_security_control(
-            scc_id=f"SCC-{self.table.rowCount()+1}",
-            name=f"SCC-{self.table.rowCount()+1}",
+        new_scc_id = SCM.generate_new_scc_id()
+        control_name = f"{new_scc_id}"
+
+        created = SCM.create_security_control(
+            scc_id=new_scc_id,
+            name=control_name,
             security_goal_id="",
             description="",
             comments=""
         )
-        # This should save and return the new record with UUID
 
-        # --- 2. Add to UI table ---
+        if not created:
+            QMessageBox.critical(self, "Error", f"Could not create Security Control {new_scc_id}")
+            return
+
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
-        self.table.setItem(row_idx, 1, QTableWidgetItem(obj.scc_id))
-        self.table.setItem(row_idx, 2, QTableWidgetItem(obj.name))
+        self.table.setRowHeight(row_idx, 40)
+        self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget())  # If you have a sidebar, otherwise remove this line
 
-        sg_combo = MultiSelectComboSelector(self.security_property_list, parent=self.table)
-        sg_combo.set_selected_items([])
+        # ID column - Readonly
+        id_item = QTableWidgetItem(created.scc_id)
+        id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+        self.table.setItem(row_idx, 1, id_item)
+
+        # Name column - editable
+        name_item = QTableWidgetItem(created.name or control_name)
+        self.table.setItem(row_idx, 2, name_item)
+
+        self.previous_text = name_item.text()
+        self.find_duplicates(name_item)
+        self.existing_entries.add(name_item.text())
+
+        # Security Goals multiselect
+        sg_combo = TSMultiSelectComboBox(self.security_property_list, parent=self.table)
+        sg_combo.set_text(created.security_goal_id.split(',') if created.security_goal_id else [])
         sg_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
         self.table.setCellWidget(row_idx, 3, sg_combo)
-        self.table.setItem(row_idx, 4, QTableWidgetItem(""))
-        self.table.setItem(row_idx, 5, QTableWidgetItem(""))
 
-        self.row_uuid_map[row_idx] = obj.uuid
+        # Description and Comments
+        self.table.setItem(row_idx, 4, QTableWidgetItem(created.description or ''))
+        self.table.setItem(row_idx, 5, QTableWidgetItem(created.comments or ''))
+
+        self.row_uuid_map[row_idx] = created.uuid
 
         self.update_button_states()
         interfaces.unsaved_changes = True
         self.table.itemChanged.connect(self.find_duplicates)
-
+        self.table.setCurrentCell(row_idx, 2)  # Focus on Name field
 
     def delete_entry(self):
-        print("delete entry check.......................")
         selected_rows = sorted(self.table.selectionModel().selectedRows(), key=lambda x: x.row(), reverse=True)
         if not selected_rows:
-            print("[DEBUG] No row selected for deletion.")
             return
 
         for index in selected_rows:
             row = index.row()
             uuid = self.row_uuid_map.get(row)
-            print(f"[DEBUG] UUID for row {row}: {uuid}")
             if uuid:
-                print(f"[DEBUG] Deleting security control with UUID: {uuid}")
                 SCM.delete_security_control(uuid)
                 self.table.removeRow(row)
-            else:
-                print(f"[DEBUG] No UUID found for row {row}. Skipping.")
 
-        # FULL REBUILD of uuid map
         new_map = {}
         for row in range(self.table.rowCount()):
             scc_id_item = self.table.item(row, 1)
@@ -190,7 +220,6 @@ class SecurityControls_Module(QWidget):
                         new_map[row] = uuid
                         break
         self.row_uuid_map = new_map
-        print(f"[DEBUG] Remapped row_uuid_map: {self.row_uuid_map}")
 
         self.update_button_states()
         self.refrash_existing_entries()
@@ -198,44 +227,33 @@ class SecurityControls_Module(QWidget):
 
     def submit_changes(self):
         self.table.setFocus()
+        print("----------------step1----------------")
         SCM.persist_security_control_changes()
-        AS.remove_SC_from_risk_data()
-        AS.sync_security_controls_with_riskcontrol()
-        AS.sync_security_controls_with_attack()
+        print("----------------step2----------------")
         self.update_button_states()
-        interfaces.unsaved_changes = False
+        interfaces.unsaved_changes = False # Clear old rows
+        self.load_data()            # ✅ Reload saved data
 
     def update_cell_to_cache(self, item=None):
-        # item can be None if called from dropdown
-        if item:
-            row = item.row()
-        else:
-            # Called from dropdown, find current row in focus or selected
-            row = self.table.currentRow()
+        row = item.row() if item else self.table.currentRow()
         uuid = self.row_uuid_map.get(row)
         if not uuid:
             return
 
-        # For multi-select widget in "Security Goals" (column 2)
-        sg_combo = self.table.cellWidget(row, 2)
-        if sg_combo:
-            sg_selected = sg_combo.selected_items()
-            security_goal_id = ", ".join(sg_selected)
-        else:
-            # fallback to text
-            security_goal_id = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
+        sg_combo = self.table.cellWidget(row, 3)
+        security_goal_id = ", ".join(sg_combo.selected_items()) if sg_combo else ""
 
         updates = {
-            "scc_id": self.table.item(row, 0).text() if self.table.item(row, 0) else "",
-            "name": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
+            "scc_id": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
+            "name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
             "security_goal_id": security_goal_id,
-            "description": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-            "comments": self.table.item(row, 4).text() if self.table.item(row, 4) else "",
+            "description": self.table.item(row, 4).text() if self.table.item(row, 4) else "",
+            "comments": self.table.item(row, 5).text() if self.table.item(row, 5) else "",
         }
+
         SCM.update_security_control(uuid, updates)
         interfaces.unsaved_changes = True
 
-    
     def update_button_states(self):
         selected_rows = self.table.selectionModel().selectedRows()
         enable = bool(selected_rows)
@@ -286,9 +304,17 @@ class SecurityControls_Module(QWidget):
         row = self.table.currentRow()
         for i, (label, widget) in enumerate(self.security_control_property_controls):
             table_item = self.table.item(row, i)
-            if hasattr(widget, "set_text"):
-                widget.set_text(table_item.text() if table_item and table_item.text() else "")
+            if not table_item:
+                continue
 
+            if hasattr(widget, "set_text"):
+                if isinstance(widget, TSMultiSelectComboBox):
+                    value = table_item.text()
+                    widget.set_text(value.split(",") if value else [])
+                else:
+                    widget.set_text(table_item.text() or "")
+
+        # Also call the helper to refresh dropdowns
         PVD.SecurityControls_display_selected_row(
             self.table,
             self.security_control_property_controls,
@@ -297,20 +323,22 @@ class SecurityControls_Module(QWidget):
             self.property_panel_manager.toggle_button
         )
 
-    def update_button_states(self):
-        selected_rows = self.table.selectionModel().selectedRows()
-        enable = bool(selected_rows)
-        if hasattr(self, 'delete_button'):
-            self.delete_button.setEnabled(True)
-        if hasattr(self, 'submit_button'):
-            self.submit_button.setEnabled(True)
-        if hasattr(self, 'add_button'):
-            self.add_button.setEnabled(True)
-
-
     def on_row_selection_changed(self, selected, deselected):
-        if self.table.currentRow() >= 0:
+        current_row = self.table.currentRow()
+
+        # ✅ Show data in property panel
+        if current_row >= 0:
             self.display_row_data_in_panel(None)
+
+        # ✅ Update the dot indicator in column 0
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Enable/disable buttons
+        self.update_button_states()
+
 
     def on_scc_property_name_changed(self): pass
     def on_scc_property_securityproperty_changed(self): pass

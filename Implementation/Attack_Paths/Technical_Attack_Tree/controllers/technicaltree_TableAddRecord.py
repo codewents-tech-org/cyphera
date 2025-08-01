@@ -6,9 +6,7 @@ import models.helper as helper
 import components.table.multioption_selector as MOS
 import components.table.tree_row_indicator as TRI2
 import controllers.DatabaseCreator as DB
-from controllers.schema_manager import get_instances, get_first_instance, create_instance, update_instance
-from controllers.database_tables.attack_paths_tables import AttackTree, RiskControlTree, TechnicalTreeHome, AttackLeafNodes
-from controllers.database_tables.target_of_evaluation_tables import TOEConfiguration
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -18,23 +16,17 @@ def technical_new_entry(self):
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
         self.table.setRowHeight(row_idx, 40)
-        sidebar = TRI2.SidebarWidget(parent=self, index=row_idx)
+        sidebar = TRI2.SidebarWidget(parent = self, index=row_idx)
         self.table.setCellWidget(row_idx, 0, sidebar)
-
-        # ORM: fetch TOE configuration options
-        toe_configuration_rows = get_instances(TOEConfiguration)
-        toe_configuration_options = [
-            f"{row.toe_configuration_id}::{row.toe_configuration_name}"
-            for row in toe_configuration_rows
-        ]
-
-        # ORM: fetch Assumptions
-        # assumptions_rows = get_instances(Assumptions)
-        # assumptions_list = [
-        #     f"{row.assumption_id}::{row.assumptions}"
-        #     for row in assumptions_rows
-        # ]
-
+        
+        toe_configuration_options = []
+        toe_configuration = DB.execute_db("SELECT toe_configuration_id, toe_configuration_name FROM toe_configuration")    
+        for toec_id, toec_name in toe_configuration:
+            toe_configuration_options.append(f"{toec_id}::{toec_name}")
+        
+        assumptions_rows = DB.execute_db("SELECT assumption_id, assumptions FROM assumptions")
+        assumptions_list = [f"{assumption_id}::{assumption}" for assumption_id, assumption in assumptions_rows]
+        
         # Generate an auto-generated ID
         tat_id = helper.technicalattack_generate_id(self.table)
         id_item = QTableWidgetItem(tat_id)
@@ -62,20 +54,23 @@ def technical_new_entry(self):
         used_in_riskcontrol_tree_item.setFlags(used_in_riskcontrol_tree_item.flags() & ~Qt.ItemIsEditable)
         self.table.setItem(row_idx, 4, used_in_riskcontrol_tree_item)
 
-        # TOE Configuration
+        # TOE Configuration 
         toe_config_item = MOS.TSMultiSelectComboBox(toe_configuration_options)
         toe_config_item.set_text("")
         self.table.setCellWidget(row_idx, 5, toe_config_item)
 
         # Assumptions
-        # assumption_item = MOS.TSMultiSelectComboBox(assumptions_list)
-        # assumption_item.set_text("")
-        # self.table.setCellWidget(row_idx, 6, assumption_item)
+        assumption_item = MOS.TSMultiSelectComboBox(assumptions_list)
+        assumption_item.set_text("")
+        self.table.setCellWidget(row_idx, 6, assumption_item)
 
         comments_item = QTableWidgetItem("")
         self.table.setItem(row_idx, 7, comments_item)
 
         self.table.setCurrentCell(row_idx, 1)
+    except sqlite3.Error as e:
+        QMessageBox.critical(None, "Database Error", f"Error loading data: {e}")
+    except IndexError as e:
+        print(f"IndexError: Failed to set table headers. {e}")
     except Exception as e:
-        # Handles ALL DB errors (including SQLAlchemy/ORM) and other exceptions
-        QMessageBox.critical(None, "Error", f"Error loading data: {e}")
+        print(f"An unexpected error occurred: {e}")

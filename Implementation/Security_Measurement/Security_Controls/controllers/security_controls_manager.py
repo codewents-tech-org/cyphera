@@ -5,6 +5,7 @@ from controllers.schema_manager import (
     create_instance, get_instances, bulk_update_instances, get_max_numeric_suffix
 )
 from controllers.tablemodel import SecurityControls
+import Analysis.models.analysis_synchronization as AS
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,8 @@ def load_all_security_controls():
     logger.info("🔄 Loading SecurityControls from DB...")
     SECURITY_CONTROLS_CACHE.clear()
 
-    rows = get_instances(SecurityControls, {'is_deleted': 'False'})
+    rows = get_instances(SecurityControls, {'is_deleted': False})  # Correct: Boolean False
+    logger.info(f"✔️ Loaded {len(rows)} SecurityControls from DB")
     for row in rows:
         SECURITY_CONTROLS_CACHE[row.uuid] = {
             'record': row,
@@ -31,33 +33,30 @@ def load_all_security_controls():
     return [entry['record'] for entry in SECURITY_CONTROLS_CACHE.values()]
 
 
-def create_security_control(scc_id, name):
-    """Create new SecurityControl record and cache it."""
+def create_security_control(scc_id, name, security_goal_id, description, comments):
     control = SecurityControls(
         uuid=str(uuid.uuid4()),
         scc_id=scc_id,
         name=name,
-        security_goal_id='',
-        description='',
-        comments='',
-        created_by='system',
-        updated_by='system',
-        version='3',
-        is_latest='False',
-        is_deleted='False'
+        security_goal_id=security_goal_id,  # <-- Include it here
+        description=description,
+        comments=comments,
+        created_by="system",
+        updated_by="system",
+        is_deleted=False
     )
 
     created = create_instance(control)
-    if not created:
-        logger.error(f"[❌] Failed to create SecurityControl {scc_id}")
+    if created:
+        SECURITY_CONTROLS_CACHE[created.uuid] = {
+            'record': created,
+            'changed': False,
+            'deleted': False
+        }
+        return created
+    else:
+        logger.error(f"[❌] Failed to create Security Control {scc_id}")
         return None
-
-    SECURITY_CONTROLS_CACHE[created.uuid] = {
-        'record': created,
-        'changed': False,
-        'deleted': False
-    }
-    return created
 
 
 def update_security_control(uuid, updates: dict):
@@ -87,6 +86,7 @@ def delete_security_control(uuid):
 def persist_security_control_changes():
     """Persist all changed/deleted SecurityControls to the DB."""
     updates = []
+    print("----------------step3----------------")
 
     for uuid, entry in SECURITY_CONTROLS_CACHE.items():
         if not entry['changed']:
@@ -95,6 +95,7 @@ def persist_security_control_changes():
         obj = entry['record']
         if entry['deleted']:
             updates.append({'uuid': uuid, 'is_deleted': 'True'})
+            print("----------------step5----------------")
         else:
             updates.append({
                 'uuid': uuid,
@@ -105,12 +106,21 @@ def persist_security_control_changes():
                 'updated_by': obj.updated_by,
                 'is_deleted': 'False'
             })
+            print("----------------step6----------------")
 
         entry['changed'] = False  # Reset flag
+        print("----------------step7----------------")
 
     if updates:
         logger.info(f"🔁 Persisting {len(updates)} updated/deleted SecurityControls...")
         bulk_update_instances(SecurityControls, updates)
+        print("controles update completed step1")
+        AS.remove_SC_from_risk_data()
+        print("controles update completed step2")
+        AS.sync_security_controls_with_riskcontrol()
+        print("controles update completed step3")
+        AS.sync_security_controls_with_attack()
+        print("controles update completed step4")
 
 # ========================== UI HOOK ==========================
 
@@ -142,8 +152,8 @@ def create_security_control_and_insert_row(self):
 def generate_new_scc_id():
     global last_scc_number
     if last_scc_number is None:
-        last_scc_number = get_max_numeric_suffix(SecurityControls, "scc_id", prefix="SCC")
+        last_scc_number = get_max_numeric_suffix(SecurityControls, "scc_id", prefix="Ctrl")
         if last_scc_number == 0:
             last_scc_number = 0
     last_scc_number += 1
-    return f"SCC-{last_scc_number}"
+    return f"Ctrl-{last_scc_number}"

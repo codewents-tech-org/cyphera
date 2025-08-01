@@ -4,6 +4,9 @@ from controllers.schema_manager import get_instances, update_instance, get_first
 from controllers.tablemodel import NodeType, MindmapNodeType, ScopeMindmaps, ScopesReference, AttackIntermediateNodes, AttackLeafNodes, AttackTree, AttackTreeHome, ReferenceTrees
 from Target_Of_Evaluation.Scope.Scope_MindMap.tree_id_converter import rename_mindmap_node_ids_flat, rename_attacktree_node_ids_flat
 from Attack_Paths.controllers.backend_afr_calculator import update_afr
+from Attack_Paths.Technical_Attack_Tree.controllers.backend_tat_table_update import update_technical_tree_table
+from Attack_Paths.RiskControl_Tree.controllers.backend_rct_table_update import update_riskcontrol_tree_table
+from Attack_Paths.Attack_Tree.controllers.backend_at_table_update import update_attack_tree_table
 
 import uuid
 import datetime
@@ -261,6 +264,9 @@ def mindmap_attacktree_generator(scope_id, scope_name):
             if is_afr_calc_enable:
                 for threat in threats:
                     update_afr(threat, "attack_tree")
+                    update_technical_tree_table(threat, "attack_tree")
+                    update_riskcontrol_tree_table(threat)
+                    update_attack_tree_table(threat)
 
     except Exception as e:
         print(f"Error occurred: {e}")

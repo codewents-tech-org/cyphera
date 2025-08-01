@@ -285,7 +285,6 @@ class Assumptions(QWidget):
 
     def submit_changes(self):
         persist_assumption_changes()
-        #AS.sync_assumptions_with_securityClaims()
         self.update_button_states()
         interfaces.unsaved_changes = False
 

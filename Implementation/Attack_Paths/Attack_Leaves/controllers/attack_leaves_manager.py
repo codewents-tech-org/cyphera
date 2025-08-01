@@ -3,18 +3,22 @@ import logging
 from Attack_Paths.controllers.Refresh_AllTree_Leaf_Data import Update_AllTree_Leaf
 from Attack_Paths.controllers.Update_Connected_Modules import update_attacktree_table, update_risktreatment_table, update_threat_table
 from controllers.database_tables.attack_paths_tables import (
-    AttackLeafNodes, TechnicalAttackTree, RiskControlTree, AttackTree
+    AttackLeafNodes, TechnicalAttackTree, RiskControlTree, AttackTree, NodeType
 )
 from controllers.schema_manager import (
     create_instance, get_instances, update_instance, delete_instance,
     get_first_instance, get_max_numeric_suffix, bulk_update_instances,
-    get_instances_like
+    get_instances_like, delete_all_instance
 )
 from PyQt5.QtWidgets import QTableWidgetItem, QLineEdit, QMessageBox
 from PyQt5.QtCore import Qt
 import models.helper as helper
 import components.table.multioption_selector as MOS
 import components.table.table_row_indicator as TRI
+from Attack_Paths.controllers.backend_afr_calculator import update_afr, collect_trees_by_updated_leaf
+from Attack_Paths.Technical_Attack_Tree.controllers.backend_tat_table_update import update_technical_tree_table
+from Attack_Paths.RiskControl_Tree.controllers.backend_rct_table_update import update_riskcontrol_tree_table
+from Attack_Paths.Attack_Tree.controllers.backend_at_table_update import update_attack_tree_table
 
 logger = logging.getLogger(__name__)
 
@@ -136,21 +140,45 @@ def generate_new_attack_leaf_id(self):
                     max_ui_id = max(max_ui_id, n)
                 except Exception:
                     pass
-    return f"Lf{max_ui_id + 1}"
+    return f"Lf-{max_ui_id + 1}"
 
 
 
 # ========================== SYNC / BUSINESS LOGIC ==========================
 
 def sync_all_attack_leafs(updated_leaf_ids, deleted_leaf_ids):
-    if updated_leaf_ids:
-        # Update_AllTree_Leaf(value_u0d_leafs_list=updated_leaf_ids, name_updated_leafs_list=[])
-        update_threat_table()
-        # update_attacktree_table()
-        # update_risktreatment_table()
-    if deleted_leaf_ids:
-        for leaf_id in deleted_leaf_ids:
-            remove_leaf_from_trees(leaf_id)
+    updated_leaf_ids_list = []
+    updated_leaf_ids_list.extend(deleted_leaf_ids)
+    updated_leaf_ids_list.extend(updated_leaf_ids)
+
+    modified_leaf_ids = []
+    for leaf_id in updated_leaf_ids_list:
+        if leaf_id not in modified_leaf_ids:
+            modified_leaf_ids.append(leaf_id)
+
+    technical_tree_ids, risk_control_tree_ids, attack_tree_ids = [], [], []
+    if modified_leaf_ids:
+        technical_tree_ids, risk_control_tree_ids, attack_tree_ids = collect_trees_by_updated_leaf(modified_leaf_ids)
+        if deleted_leaf_ids:
+            for leaf_id in deleted_leaf_ids:
+                delete_all_instance(TechnicalAttackTree, {'node_type': NodeType.LEAF, 'node_id': leaf_id})
+                delete_all_instance(RiskControlTree, {'node_type': NodeType.LEAF, 'node_id': leaf_id})
+                delete_all_instance(AttackTree, {'node_type': NodeType.LEAF, 'node_id': leaf_id})
+
+        print(f"Technical Trees: {technical_tree_ids}, Risk Control Trees: {risk_control_tree_ids}, Attack Trees: {attack_tree_ids}")
+        for tree in technical_tree_ids:
+            update_afr(tree, "technical_tree")
+
+        for tree in risk_control_tree_ids:
+            update_afr(tree, "risk_control_tree")
+            update_technical_tree_table(tree, "risk_control_tree")
+            update_riskcontrol_tree_table(tree)
+
+        for tree in attack_tree_ids:
+            update_afr(tree, "attack_tree")
+            update_technical_tree_table(tree, "attack_tree")
+            update_riskcontrol_tree_table(tree)
+            update_attack_tree_table(tree)
 
 def remove_leaf_from_trees(leaf_id):
     like_pattern = f"{leaf_id} %"

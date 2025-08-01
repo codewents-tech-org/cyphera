@@ -101,44 +101,40 @@ def update_riskcontroltree_table():
 
 def update_technicaltree_table():
     # Step 1: Build technical_map: {id: name}
-    technical_rows = get_instances(TechnicalTreeHome)
-    technical_map = {row.id: row.name if row.name else row.id for row in technical_rows}
-    technical_list = list(technical_map.keys())
+    technical_rows = get_instances(TechnicalTreeHome, {'is_deleted': False})
+    
+    # ✅ Fetch all threats from the database
+    threat_rows = get_instances(Threats, {'is_deleted': 'False'})
+    threat_ids = [t.threat_id for t in threat_rows]
+    
+    # ✅ Fetch all security control from the database
+    sc_rows = get_instances(SecurityControls, {'is_deleted': 'False'})
+    sc_ids = [sc.scc_id for sc in sc_rows]
 
-    for technical_id in technical_list:
-        text = f"{technical_id} {technical_map[technical_id]}"
+    for technical_row in technical_rows:
+        used_in_threat_str = technical_row.used_in_threat or ''
+        used_in_threat_list = [item.strip() for item in used_in_threat_str.split(",") if item.strip()]
 
-        # (A) Find AttackTree nodes whose node_id starts with the technical id
-        attacktree_nodes = [
-            node for node in get_instances(AttackTree)
-            if node.node_id.startswith(f"{technical_id}_node")
-        ]
-        attacktree_technical_map = set()
-        for node in attacktree_nodes:
-            node_id_prefix = node.node_id.strip().split('_')[0] if '_' in node.node_id else node.node_id.strip()
-            attacktree_technical_map.add(node_id_prefix)
-        attacktree_technical_map_str = ', '.join(sorted(attacktree_technical_map))
+        used_in_riskcontrol_str = technical_row.used_in_riskcontrol or ''
+        used_in_riskcontrol_list = [item.strip() for item in used_in_riskcontrol_str.split(",") if item.strip()]
 
-        # (B) Find RiskControlTree nodes whose node_id starts with the technical id
-        riskcontroltree_nodes = [
-            node for node in get_instances(RiskControlTree)
-            if node.node_id.startswith(f"{technical_id}_node")
-        ]
-        riskcontroltree_technical_map = set()
-        for node in riskcontroltree_nodes:
-            node_id_prefix = node.node_id.strip().split('_')[0] if '_' in node.node_id else node.node_id.strip()
-            riskcontroltree_technical_map.add(node_id_prefix)
-        riskcontroltree_technical_map_str = ', '.join(sorted(riskcontroltree_technical_map))
 
-        # (C) Update TechnicalTreeHome.used_in_threat and used_in_riskcontrol
-        update_instance(
-            TechnicalTreeHome,
-            {"id": technical_id},
-            {
-                "used_in_threat": attacktree_technical_map_str,
-                "used_in_riskcontrol": riskcontroltree_technical_map_str
-            }
-        )
+        used_in_threat = [item for item in used_in_threat_list if item in threat_ids]
+        used_in_riskcontrol = [item for item in used_in_riskcontrol_list if item in sc_ids]
+
+        used_in_threat_updated = ", ".join(used_in_threat) if used_in_threat else ''
+        used_in_riskcontrol_updated = ", ".join(used_in_riskcontrol) if used_in_riskcontrol else ''
+
+        if used_in_threat_str != used_in_threat_updated or used_in_riskcontrol_str != used_in_riskcontrol_updated:
+            # (C) Update TechnicalTreeHome.used_in_threat and used_in_riskcontrol
+            update_instance(
+                TechnicalTreeHome,
+                {"id": technical_row.id},
+                {
+                    "used_in_threat": used_in_threat_updated,
+                    "used_in_riskcontrol": used_in_riskcontrol_updated
+                }
+            )
 
 
 def update_risktreatment_table():

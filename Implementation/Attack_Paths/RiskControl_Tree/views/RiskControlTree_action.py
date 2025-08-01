@@ -16,6 +16,8 @@ from Attack_Paths.RiskControl_Tree.views.riskcontrol_table_toolbar_panel import 
 from Attack_Paths.RiskControl_Tree.views.riskcontrol_tree_toolbar_panel import create_tree_toolbar
 from Attack_Paths.views.attackpaths_table_panel import create_table_panel
 from Attack_Paths.RiskControl_Tree.views.riskcontroltree_column_setup import Setup_Tabel_ColumnHeading
+from controllers.schema_manager import get_instances,get_first_instance,create_instance
+from controllers.tablemodel import RiskControlTreeHome, Assumptions
 import models.TableStyle as TS
 import models.ToolbarStyle as TBS
 import controllers.DatabaseCreator as DB
@@ -29,7 +31,9 @@ import styles.tree_panel_style as tree_panel_style
 import styles.action_panel_style as action_panel_style
 import utils.interface_utils as interfaces
 from components.loading_dialog import RoundLoader
-import utils.interface_utils as interfaces
+from components.table.table_panel import TablePanelWrapper
+from Attack_Paths.RiskControl_Tree.controllers.risk_control_tree_manager import load_all_RCT, RCT_CACHE, persist_tree_changes, update_tree
+from components.table.multiselect_combo import MultiSelectComboSelector
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,10 @@ class RiskControl_Tree(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
         self.layout.setSpacing(0)  # Remove spacing between widgets
+        self.data_loaded = False
+        self.table_wrapper = None  # ✅ Ensure defined before use
+        self.row_uuid_map = {}  # ✅ maps row index → UUID
+        self.tree_datas_after = {}
         self.Init_UI()
     
     def Init_UI(self):
@@ -60,12 +68,21 @@ class RiskControl_Tree(QWidget):
         create_toolbar(self)
         self.home_panel_layout.addWidget(self.toolbar)
         action_panel.create_action_panel(self)
-        create_table_panel(self)
+
+        # ✅ Table wrapper setup
+        self.table_wrapper = TablePanelWrapper(use_row_indicator=True, use_tree_indicator=True, parent=self)
+        self.table_wrapper.create_table_panel()
+        self.table_wrapper.set_headers("riskcontroltree")  # Set column headers for scope
+
+        self.table = self.table_wrapper.table
+        self.table_layout = self.table_wrapper.table_layout
+        
         self.index = None
         self.table.clicked.connect(self.get_index)
-        self.action_panel_layout.addLayout(self.table_layout)
+
+        # Table goes inside the action panel
+        self.action_panel_layout.addWidget(self.table_wrapper.table)
         self.home_panel_layout.addWidget(self.action_panel)
-        Setup_Tabel_ColumnHeading(self)
 
           # Enable/disable buttons
         self.submit_button.setEnabled(False)
@@ -77,7 +94,9 @@ class RiskControl_Tree(QWidget):
         self.table_data_changed = False
         self.table.itemChanged.connect(self.table_data_changed_set_flag)
         self.table.itemChanged.connect(self.set_unsaved_changes)
+        self.table.itemChanged.connect(self.update_cache_data)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.update_button_states()
 
         # Create the child panel which will hold the inner QTabWidget
@@ -120,103 +139,117 @@ class RiskControl_Tree(QWidget):
         self.tab_container.addTab(self.home_panel, "Home")  # Home panel as the first tab
         self.tab_container.addTab(self.child_panel, "Child Panel")
         self.previous_text = None
+        self.load_data()
 
     # Load Risk Control Tree table data from the database
     def load_data(self):
         logger.info("Risk Control Tree Table Data Loading Started")
-        self.tab_container.setCurrentIndex(0)
-        # Show the round loader before loading data
-        self.loader = RoundLoader(self, label_text="Loading Risk Control Data...")
-        self.loader.show()
-        QApplication.processEvents() 
-        self.tab_container.setCurrentIndex(0)
-        try:
-            self.table.setRowCount(0)
-            # rows = DB.execute_db("SELECT id, name, mitigates, assumptions, comment FROM riskcontrol_tree_home")
-            # if not rows:    return
-            # assumptions_rows = DB.execute_db("SELECT assumption_id, assumptions FROM assumptions")
-            # formatted_assumptions = [f"{assumption_id}::{assumption}" for assumption_id, assumption in assumptions_rows]
-            rows = [('Ctrl-1', 'control 1', '', '', 'This is a comment'),]
-            for row_idx, (control_id, name, mitigates, assumptions, comment) in enumerate(rows):
-                self.table.insertRow(row_idx)
-                self.table.setRowHeight(row_idx, 40)
-                sidebar = TRI2.SidebarWidget(parent = self, index=row_idx, tree_indicator=True)
-                sidebar.tree_button.clicked.connect(self.open_tree)
-                self.table.setCellWidget(row_idx, 0, sidebar)
-                id_item = QTableWidgetItem(control_id)
-                id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 1, id_item)
-                name_item = QTableWidgetItem(name)
-                name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 2, name_item)
-                mitigates_item = QTableWidgetItem(mitigates)
-                mitigates_item.setFlags(mitigates_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 3, mitigates_item)
-                formatted_assumptions = []
-                assumptions_combo = MOS.TSMultiSelectComboBox(formatted_assumptions)
-                selected_assumptions = assumptions.strip().split(", ")
-                # new_selected_assumptions = []
-                # for data in selected_assumptions:
-                #     for option in formatted_assumptions:
-                #         if f"{data}::" in option and data != '':
-                #             new_selected_assumptions.append(option)  
-                # assumptions_combo.set_text(new_selected_assumptions)
-                # assumptions_combo.currentTextChanged.connect(self.set_unsaved_changes)
-
-                self.table.setCellWidget(row_idx, 4, assumptions_combo)
-                comments_item = QTableWidgetItem(comment)
-                mitigates_item.setFlags(mitigates_item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, 5, comments_item)
-
-            if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
+        if self.data_loaded:
             self.table_data_changed = False
-            interfaces.unsaved_changes = False   
-            logger.info("Risk Control Tree Table Data Loaded successfully")
+            self.tab_container.setCurrentIndex(0)
+            return  # 🚫 Prevent reloading if already loaded
+        
+        interfaces.previous_tree = None
+        self.tab_container.setCurrentIndex(0)
+        self.loader = RoundLoader(self, label_text="Loading...")
+        self.loader.show()
+        QApplication.processEvents()
 
-            # rows = DB.execute_db("SELECT id FROM riskcontrol_tree_home")
-            # if rows:
-            #     available_ids = [row[0] for row in rows]
-            #     for i in reversed(range(self.inner_tab_widget.count())):
-            #         if self.inner_tab_widget.tabText(i) not in available_ids:
-            #             self.inner_tab_widget.removeTab(i)
-            # else:
-            #     for i in reversed(range(self.inner_tab_widget.count())):
-            #         self.inner_tab_widget.removeTab(i)
-            
-        except sqlite3.Error as e:
-            QMessageBox.critical(None, "Database Error", f"Error loading data: {e}")
-        finally:
-            self.loader.close()    
+        self.table.setRowCount(0)
+        loaded_trees = load_all_RCT()
+        self.table_data_changed = False
+        interfaces.unsaved_changes = False
+
+        # ✅ 1. Load dropdown options
+        self.assumptions_option_list = [
+            f"{item.assumption_id}::{item.assumptions}"
+            for item in get_instances(Assumptions)
+        ]
+        self.tree_datas_before = {}
+
+        for tree in loaded_trees:
+            row_index = self.table.rowCount()
+            self.table_wrapper.insert_row([
+                tree.id,
+                tree.name,
+                tree.mitigates if tree.mitigates else '',
+                '',
+                tree.comment if tree.comment else ''
+            ])
+            self.row_uuid_map[row_index] = tree.id
+            self.add_multiselect_to_table_cell(row_index, 4, self.assumptions_option_list, tree.assumption_id)
+            self.tree_datas_before[tree.id] = tree.comment
+
+        # Sync open tabs with tree_ids
+        available_ids = set(self.tree_datas_before.keys())
+        for i in reversed(range(self.inner_tab_widget.count())):
+            tab_text = self.inner_tab_widget.tabText(i)
+            if tab_text not in available_ids:
+                self.inner_tab_widget.removeTab(i)
+
+        self.loader.close()
+        self.data_loaded = True  # ✅ Mark as loaded
+
+    def update_cache_data(self):
+        row = self.table.currentRow()
+        changed_tree_ids = []
+
+        id_item = self.table.item(row, 1)
+        name_item = self.table.item(row, 2)
+        if not id_item or not name_item:
+            return
+        tree_id = id_item.text()
+        name = name_item.text()
+        mitigates = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
+        comments = self.table.item(row, 5).text() if self.table.item(row, 5) else ""
+
+        if tree_id in RCT_CACHE:
+            record = RCT_CACHE[tree_id]['record']
+            old_comments = record.comment
+            changed = update_tree(tree_id, {
+                'name': name,
+                'mitigates': mitigates,
+                'comment': comments
+            })
+            if changed and old_comments != comments:
+                changed_tree_ids.append(tree_id)
+
+        self.tree_datas_after[tree_id] = comments
+
+        logger.info(f"Tree comments before: {self.tree_datas_before}")
+        logger.info(f"Tree comments after: {self.tree_datas_after}")
 
     # Highlight selected row in table
     def on_row_selection_changed(self):
-        temp = interfaces.unsaved_changes
-        TVH.on_row_selection_changed2(self.table)
-        interfaces.unsaved_changes = temp
+        # temp = interfaces.unsaved_changes
+        TVH.on_row_selection_changed2(self.table, self)
+        # interfaces.unsaved_changes = temp
 
     def get_index(self, index):
         self.index = index
         print("index: ", index)
 
     # Open Risk Control Tree in new tab
-    def open_tree(self):
-        sender = self.sender()
-        if sender:
-            sidebar_widget = sender.parent()
-            for row in range(self.table.rowCount()):
-                if self.table.cellWidget(row, 0) == sidebar_widget:
-                    self.table.selectRow(row)
-                    self.index = self.table.model().index(row, 0)
-                    TVH.on_row_selection_changed2(self.table)
-                    break
+    def open_tree(self, index):
+        if not index or not index.isValid():
+            QMessageBox.warning(None, "Selection Error", "Unable to determine the selected row.")
+            return
+        
+        # Ensure no existing loader before creating a new one
+        if not hasattr(self, "round_loader") or self.round_loader is None:
+            self.round_loader = RoundLoader(self, label_text='Loading...')
+            self.round_loader.show()
+            QApplication.processEvents()  # Ensure UI updates while loader is shown
 
-        if self.index is None or not self.index.isValid():
+        if index is None or not index.isValid():
             QMessageBox.warning(None, "Selection Error", "Unable to determine the selected row.")
             if self.round_loader:
                 self.round_loader.accept()  # Close loader in case of error
                 self.round_loader = None
             self.setEnabled(True)  # Re-enable interactions
             return
+
+        row = index.row()
         open_tree_enable = True
         # Handle unsaved changes before switching to the edit page
         if self.table_data_changed:
@@ -228,56 +261,38 @@ class RiskControl_Tree(QWidget):
                 self.Submit_Changes()
 
         # Extract item_id and item_name
-        row = self.index.row()
-        item_id = self.table.itemFromIndex(self.index.siblingAtColumn(1)).text()
-        item_name = self.table.itemFromIndex(self.index.siblingAtColumn(2)).text()
+        item_id = self.table.item(row, 1).text()
+        item_name = self.table.item(row, 2).text()
         logger.info(f"Risk Control Tree Editor Opened for {item_id} {item_name}")
 
         # **DISABLE USER INTERACTIONS DURING LOADING**
         self.setEnabled(False)  # Disables all clicks, buttons, and interactions
 
-        # Ensure no existing loader before creating a new one
-        if not hasattr(self, "round_loader") or self.round_loader is None:
-            self.round_loader = RoundLoader(self, label_text='Loading...')
-            self.round_loader.show()
-            QApplication.processEvents()  # Ensure UI updates after showing loader
+        tab_index = self.is_tab_available(item_id)
+        if tab_index != -1:
+            # If tab exists, switch to it and load data
+            self.inner_tab_widget.setCurrentIndex(tab_index)
+            self.active_control_ct_class = self.tab_control_instances[f'{self.inner_tab_widget.tabText(tab_index)}']
+            self.active_control_ct_class.Load_RiskControlTree()
+        else:
+            # Create a new tab if it doesn't exist
+            tab_header = CTA.TabHeader(title=item_id, close_callback=lambda: self.Close_Tab(self.inner_tab_widget.indexOf(tab_header)))
 
-        try:
-            tab_index = self.is_tab_available(item_id)
-            if tab_index != -1:
-                # If tab exists, switch to it and load data
-                self.inner_tab_widget.setCurrentIndex(tab_index)
-                self.active_control_ct_class = self.tab_control_instances[f'{self.inner_tab_widget.tabText(tab_index)}']
-                self.active_control_ct_class.Load_RiskControlTree()
-            else:
-                # Create a new tab if it doesn't exist
-                tab_header = CTA.TabHeader(title=item_id, close_callback=lambda: self.Close_Tab(self.inner_tab_widget.indexOf(tab_header)))
+            control_ct_class = RCTCA.ControlCTClass(self)
+            if item_id not in self.tab_control_instances:
+                self.tab_control_instances[item_id] = control_ct_class
 
-                control_ct_class = RCTCA.ControlCTClass(self)
-                if item_id not in self.tab_control_instances:
-                    self.tab_control_instances[item_id] = control_ct_class
+            control_ct_class.Create_RiskControlTree_Tab(item_id, item_name)
+            self.active_control_ct_class = self.tab_control_instances[item_id]
+            self.tree_toolbar_label.setText(item_name)
 
-                control_ct_class.Create_RiskControlTree_Tab(item_id, item_name)
-                self.active_control_ct_class = self.tab_control_instances[item_id]
-                self.tree_toolbar_label.setText(item_name)
-
-            if open_tree_enable == True:
-                self.tab_container.setCurrentIndex(1)
-
-        except Exception as e:
-            logger.error(f"Error opening Risk Control Tree: {e}")
-            QMessageBox.critical(None, "Error", f"An error occurred: {e}")
-
-        finally:
-            # **ENABLE USER INTERACTIONS AFTER LOADING COMPLETES**
-            self.setEnabled(True)  # Re-enables clicks and interactions
-
-            # Close round loader after loading completes
-            if self.round_loader:
-                self.round_loader.accept()
-                self.round_loader = None  # Ensure loader reference is reset
-
-
+        if open_tree_enable == True:
+            self.tab_container.setCurrentIndex(1)
+        self.setEnabled(True)
+        # Close the round loader after the tree is fully loaded
+        if self.round_loader:
+            self.round_loader.accept()
+            self.round_loader = None
 
     def update_button_states(self):
         """
@@ -295,38 +310,14 @@ class RiskControl_Tree(QWidget):
         Handle the submit action, ensuring pending edits are saved.
         """
         self.table.setFocus()  # Forces focus away from the current editor to trigger commit
-        # Process the table data
-        row_count = self.table.rowCount()
-        col_count = self.table.columnCount()
-
-        data = []
-        for row in range(row_count):
-            row_data = []
-            for col in range(col_count):
-                item = self.table.item(row, col)
-                row_data.append(item.text() if item else "")
-            data.append(row_data) 
         logger.info("Risk Control Tree Table Data Saving Started")
         self.update_button_states() 
-        DB.execute_db("DELETE FROM riskcontrol_tree_home")
-        for row in range(self.table.rowCount()):
-            row_data = []
-            for col in range(1, self.table.columnCount()):
-                if col == 4:  # Assumptions column (multi-select combo box)
-                    combo_box = self.table.cellWidget(row, col)
-                    if combo_box is not None:
-                        selected_items = combo_box.selected_items()
-                        assumption_ids = [item.split("::")[0] for item in selected_items]
-                        row_data.append(", ".join(assumption_ids))
-                    else:
-                        row_data.append("")
-                else:
-                    item = self.table.item(row, col)
-                    row_data.append(item.text() if item is not None else "")
-            DB.update_db("INSERT INTO riskcontrol_tree_home VALUES (?, ?, ?, ?, ?)", tuple(row_data))
+        persist_tree_changes()
+        self.tree_datas_before = self.tree_datas_after.copy()
         logger.info("Risk Control Tree Table Data Saved Successfully")
         self.table_data_changed = False
         interfaces.unsaved_changes = False
+    
     def update_toolbar_tree_label(self, index):
         logger.info("Risk Control Tree Toolbar Label Update Started")
         # Get the selected tab ID
@@ -354,36 +345,18 @@ class RiskControl_Tree(QWidget):
             elif reply == QMessageBox.No:
                 interfaces.unsaved_changes = False  
         
-        # **Skip creating a new loader if open_tree() is running**
-        if not hasattr(self, "round_loader") or self.round_loader is None:
-            self.round_loader = RoundLoader(self, label_text='Loading Tab...')
-            self.round_loader.show()
-            QApplication.processEvents()  # Ensure UI updates
+        rows = get_first_instance(RiskControlTreeHome, {'id':f'{self.inner_tab_widget.tabText(index)}'})
+        if rows:
+            self.tree_toolbar_label.setText(rows.id) 
+            self.active_control_ct_class = self.tab_control_instances[f'{self.inner_tab_widget.tabText(index)}']
 
-        try:
-            # rows = DB.execute_db_query("SELECT name FROM riskcontrol_tree_home WHERE id = ?", (tab_id,))
-            if True:
-                self.tree_toolbar_label.setText('Ctrl-1')
-                self.active_control_ct_class = self.tab_control_instances[tab_id]
+            # **Update previous tree reference** 
+            interfaces.previous_tree = self.active_control_ct_class
 
-                # **Update previous tree reference** 
-                interfaces.previous_tree = self.active_control_ct_class
+            if not interfaces.tool_reset_enable:
+                self.active_control_ct_class.Load_RiskControlTree()
 
-                if not interfaces.tool_reset_enable:
-                    self.active_control_ct_class.Load_RiskControlTree()
-
-                interfaces.tree_tab_panel['RiskControlTree'] = (self.inner_tab_widget, self.tab_control_instances)
-
-        except Exception as e:
-            logger.error(f"Error loading Risk Control Tree tab: {e}")
-
-        finally:
-            # **Close the loader only if it's not already handled**
-            if self.round_loader:
-                self.round_loader.accept()
-                self.round_loader = None  # Ensure loader reference is reset
-
-
+            interfaces.tree_tab_panel['RiskControlTree'] = (self.inner_tab_widget, self.tab_control_instances)
 
     # Common Save Button Handler
     def on_save_button_click(self):
@@ -430,6 +403,9 @@ class RiskControl_Tree(QWidget):
     def table_data_changed_set_flag(self):
         self.table_data_changed = True
         self.update_button_states()
+    
+    def on_row_selection_changed(self):
+        TVH.on_row_selection_changed2(self.table, self)
 
     def set_unsaved_changes(self):
         interfaces.unsaved_changes = True        
@@ -439,3 +415,35 @@ class RiskControl_Tree(QWidget):
             if self.inner_tab_widget.tabText(index) == f"{item_id}":
                 return index
         return -1  # Tab not found
+
+    def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value):
+        """
+        Generic helper for adding MultiSelectComboSelector to Threat Scenarios table.
+
+        Args:
+            row_index (int): Table row index.
+            column_index (int): Table column index.
+            option_list (list[str]): List of selectable options.
+            current_value (str): Pre-selected value from DB (comma-separated string).
+
+        """
+        combo = MultiSelectComboSelector(option_list, placeholder="Select")
+
+        # Set pre-selected items
+        if current_value:
+            if isinstance(current_value, str):
+                selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
+            else:
+                selected_items = current_value
+            combo.set_selected_items(selected_items)
+
+        def on_selection_change():
+            value = ", ".join(combo.selected_items())
+            # self.table.setItem(row_index, column_index, QTableWidgetItem(value))
+            tree_id = self.row_uuid_map.get(row_index)
+            if tree_id:
+                update_tree(tree_id, {'assumption_id': value})  # ✅ Function change
+                interfaces.unsaved_changes = True
+
+        combo.model().dataChanged.connect(on_selection_change)
+        self.table.setCellWidget(row_index, column_index, combo)

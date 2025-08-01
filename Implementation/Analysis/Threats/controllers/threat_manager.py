@@ -18,7 +18,7 @@ def load_all_threats():
     global THREAT_CACHE
     print("🔄 Loading threats from DB...")
     THREAT_CACHE.clear()
-    threats = get_instances(Threats, {'is_deleted': False})
+    threats = get_instances(Threats, {'is_deleted': 'False'})
     for threat in threats:
         THREAT_CACHE[threat.uuid] = {
             'record': threat,
@@ -110,11 +110,14 @@ def persist_threat_changes():
     if updates:
         bulk_update_instances(Threats, updates)
         print(f"🔄 Updated {len(updates)} threats in DB.")
+
         AS.update_threatscenario_from_threat()
         AS.remove_threats_from_mitigation()
         AS.sync_attack_tree_with_threats()
         AS.update_risktreatement_data()
+        print("----------------threat->risktreatment-----------------")
         AS.remove_nonexistent_threat_scenarios_from_Risk_data()
+
 def refresh_threats_cache():
     """
     Utility: Force reload the cache from DB (discarding unsaved edits).

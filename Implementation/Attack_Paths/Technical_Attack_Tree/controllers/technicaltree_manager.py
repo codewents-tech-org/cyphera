@@ -96,6 +96,10 @@ def persist_technical_tree_changes():
                 'uuid': uuid,
                 'id': obj.id,
                 'name': obj.name,
+                'used_in_threat': obj.used_in_threat,
+                'used_in_riskcontrol': obj.used_in_riskcontrol,
+                'toe_configuartion_id': obj.toe_configuartion_id,
+                'assumption_id': obj.assumption_id,
                 'comment': obj.comment,
                 'updated_by': obj.updated_by,
                 'is_deleted': False
@@ -136,9 +140,9 @@ def generate_new_id():
     global last_tt_number
 
     if last_tt_number is None:
-        last_tt_number = get_max_numeric_suffix(TechnicalTreeHome, "id", prefix="TECHTREE")
+        last_tt_number = get_max_numeric_suffix(TechnicalTreeHome, "id", prefix="TAT")
         if last_tt_number == 0:
             last_tt_number = 0
 
     last_tt_number += 1
-    return f"TECHTREE-{last_tt_number}"
+    return f"TAT-{last_tt_number}"

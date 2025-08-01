@@ -69,21 +69,20 @@ def persist_asset_changes():
     if updates:
         bulk_update_instances(Assets, updates, filter_key="asset_id")
         logger.info(f"🔄 Updated {len(updates)} assets in DB.")
+
+        # 🔁 Trigger all sync operations as part of post-submit logic
+        AS.sync_threats_with_assets()
+        AS.update_threatscenario_from_threat()
+        AS.update_risktreatement_data()
+        AS.sync_attack_tree_with_threats()
+        AS.remove_orphaned_attack_tree_rows()
+        AS.remove_nonexistent_threat_scenarios_from_Risk_data()
+        # TSS.update_scope_assets()
+        # TSS.update_scope_threats()
+        logger.info("✅ Asset-related sync operations completed.")
+        
     else:
         logger.info("✅ No asset changes to persist.")
-
-    # 🔁 Trigger all sync operations as part of post-submit logic
-    AS.sync_threats_with_assets()
-    # AS.update_threatscenario_from_threat()
-    # AS.update_risktreatement_data()
-    # AS.remove_orphaned_attack_tree_rows()
-    # AS.sync_attack_tree_with_threats()
-    # AS.remove_nonexistent_threat_scenarios_from_Risk_data()
-    # TSS.update_scope_threats()
-    
-    sync_security_controls_with_riskcontrol
-    sync_security_controls_with_attack
-    logger.info("✅ Asset-related sync operations completed.")
 
 
 

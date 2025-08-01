@@ -324,7 +324,7 @@ class TS_Module(QWidget):
 
     def on_TS_property_threat_changed(self): PVD.on_property_line_changed(self.table, 2, self.TS_threat_input)
     def on_TS_property_DS_changed(self): PVD.on_property_multiselect_changed(self.table, 3, self.TS_DS_input)
-    # def on_TS_property_toec_changed(self): PVD.on_property_multiselect_changed(self.table, 4, self.TS_toec_input)
+    def on_TS_property_toec_changed(self): PVD.on_property_multiselect_changed(self.table, 4, self.TS_toec_input)
     def on_TS_property_reasoning_changed(self): PVD.on_property_multiline_changed(self.table, 5, self.TS_reasoning_input)
     def on_TS_property_comment_changed(self): PVD.on_property_multiline_changed(self.table, 6, self.TS_comments_input)
     def display_selected_row(self): 
@@ -337,42 +337,35 @@ class TS_Module(QWidget):
 
     def build_property_panel(self):
         """
-        Dynamically creates the property input panel for Threat Scenarios.
+        Dynamically builds the Threat Scenario property input panel using PROPERTY_CONFIG.
 
-        Iterates over the `PROPERTY_CONFIG` to build labeled input widgets using a factory.
-        It applies signals, readonly flags, and dynamically assigns widget references as instance
-        variables. If enabled, it also creates and configures a Save button tied to the appropriate signal.
-
-        Effects:
-        --------
-        - Initializes self.ts_property_controls with label-widget pairs.
-        - Dynamically creates instance variables like TS_threat_input, TS_reasoning_input, etc.
-        - Adds and configures a Save button based on SAVE_BUTTON settings.
-
-        Signals:
-        --------
-        - property_save_clicked: Emits on Save with form data.
-
-        See Also:
-        ---------
-        - PropertyInputFactory.create_common_property_input
-        - PropertyInputFactory.create_save_button
-        - Threat Scenario PROPERTY_CONFIG
+        - Uses PropertyInputFactory to render fields and bind handlers.
+        - Assigns widget attributes like TS_threat_input.
+        - Appends each label-widget pair to self.ts_property_controls.
+        - Creates a Save button if enabled in config.
         """
         self.property_factory = PropertyInputFactory()
+
         for field in PROPERTY_CONFIG:
+            label = field["label"]
+            input_type = field["type"]
+            signal_handler = getattr(self, field.get("signal")) if field.get("signal") else None
+            items = field.get("items", None)
+            readonly = field.get("readonly", False)
+
             input_widget = self.property_factory.create_common_property_input(
-                field["label"],
-                field["type"],
-                self.property_layout,
-                self.ts_property_controls,
-                getattr(self, field.get("signal")) if field.get("signal") else None,
-                field.get("items")
+                label_text=label,
+                input_type=input_type,
+                layout=self.property_layout,
+                controls_list=self.ts_property_controls,
+                signal=signal_handler,
+                items=items,
+                setReadOnly=readonly
             )
 
-            if field.get("readonly"):
-                input_widget.setReadOnly(True)
-            setattr(self, f'TS_{field["label"].lower().replace(" ", "_")}_input', input_widget)
+            # Attribute like: self.TS_threat_input
+            attr_name = f"TS_{label.lower().replace(' ', '_')}_input"
+            setattr(self, attr_name, input_widget)
 
         if SAVE_BUTTON.get("enabled"):
             self.save_button = self.property_factory.create_save_button(
@@ -392,41 +385,60 @@ class TS_Module(QWidget):
 
     def display_row_data_in_panel(self, data):
         """
-        Loads data from the selected table row into the threat scenario property panel.
-
-        Delegates rendering and value mapping to `ts_display_selected_row`, which updates
-        widgets based on the data structure and current table selection.
-
-        Parameters:
-        -----------
-        data : dict
-            Selection payload with structure:
-            {
-                "sender": "Table",
-                "event": "row_selected",
-                "data": {
-                    "ID": "...",
-                    "Threat": "...",
-                    ...
-                }
-            }
-
-        Effects:
-        --------
-        - Clears and populates all editable widgets with values from the selected row.
-        - Handles special field types like multiselect and dynamically injected dropdowns.
-
-        See Also:
-        ---------
-        - PVD.ts_display_selected_row
+        Loads selected threat scenario row data into the property panel using
+        index-based mapping like Asset and Damage Scenarios modules.
         """
-        PVD.ts_display_selected_row(
-            self.table,
-            self.ts_property_controls,
-            self.toe_configuration_option_list,  # ✅ Add this line
-            self.property_panel_manager.property_panel,
-            self.property_panel_manager.toggle_button
-        )
+        print("[DEBUG] display_row_data_in_panel called with:", data)
+        row = self.table.currentRow()
+        if row < 0:
+            return
+
+        # ✅ Map each property field to its correct table column index
+        # Skip column 0 (row indicator)
+        index_to_column = {
+            0: 1,   # ID
+            1: 2,   # Threat
+            2: 3,   # Damage Scenarios
+            3: 4,   # TOE Configuration
+            4: 5,   # Reasoning
+            5: 6    # Comments
+        }
+
+        for i, (label, widget) in enumerate(self.ts_property_controls):
+            col = index_to_column.get(i)
+            if col is None:
+                continue
+
+            table_item = self.table.item(row, col)
+            cell_widget = self.table.cellWidget(row, col)
+
+            # 🔁 For multi-select fields
+            if hasattr(widget, "set_selected_items"):
+                text = table_item.text() if table_item else ""
+                selected_items = [x.strip() for x in text.split(",") if x.strip()]
+                widget.set_selected_items(selected_items)
+
+            # 🔁 For single-select (combo box)
+            elif hasattr(widget, "setCurrentText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setCurrentText(value)
+
+            # 🔁 For plain or multiline text inputs
+            elif hasattr(widget, "setText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setText(value)
+
+            elif hasattr(widget, "setPlainText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setPlainText(value)
+
+            elif hasattr(widget, "set_text"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.set_text(value)
+
+        # ✅ Ensure the panel is expanded
+        if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
+            self.property_panel_manager.toggle_button.click()
 
     def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
         """

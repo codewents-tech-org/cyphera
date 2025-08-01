@@ -8,9 +8,50 @@ from docx.shared import Pt
 from docx.oxml import OxmlElement
 import styles.tree_style as tree_style
 import ast
+from controllers.schema_manager import get_instances
+from controllers.tablemodel import AttackTree, TechnicalAttackTree, Threats, TechnicalTreeHome
+from Attack_Paths.Technical_Attack_Tree.controllers.database_to_tat import build_ta_tree_json
+
+
+def flatten_node_tree(node, base_id):
+    flat_nodes = []
+    counter = {"index": 0}
+
+    def _walk(n, parent_id):
+        node_idx = counter["index"]
+        node_id = f"{base_id}_node_{node_idx}"
+        counter["index"] += 1
+
+        # Base node structure
+        flat_node = {
+            "node_id": node_id,
+            "parent_id": parent_id,
+            "node_type": n.get("node_type"),
+            "node_label": n.get("node_label"),
+            "node_Text": n.get("node_Text"),
+            "af_value": n.get("af_value", ''),
+            "af_level": n.get("af_level", ''),
+            "gate": n.get("gate", ''),
+            "values": n.get("values", [])
+        }
+
+        flat_nodes.append(flat_node)
+
+        # Recurse into children
+        for child in n.get("childrens", []):
+            _walk(child, node_id)
+
+    _walk(node, parent_id=None)
+    return flat_nodes
 
 def Update_TechnicalAttackTree_Dictionary(document):
-    TAT_rows = DB.execute_db("""SELECT id, name FROM technical_tree_home""")
+    # TAT_rows = DB.execute_db("""SELECT id, name FROM technical_tree_home""")
+    TAT_rows = []
+    tat_data = get_instances(TechnicalTreeHome, {'is_deleted':False})
+    if tat_data:
+        for instance in tat_data:
+            TAT_rows.append(tuple([instance.id, instance.name]))
+    print(TAT_rows)
     TAT_id_list = set()
     TAT_map = {}
     if TAT_rows: 
@@ -19,7 +60,23 @@ def Update_TechnicalAttackTree_Dictionary(document):
             TAT_map[TAT_id] = TAT_name
     # document = Document()
     for TAT_id in TAT_id_list:
-        TAT_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM technical_tree WHERE Node_ID like '{TAT_id}_Node%'""")
+        # TAT_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM technical_tree WHERE Node_ID like '{TAT_id}_Node%'""")
+        TAT_rows = []
+        tree_nodes = get_instances(TechnicalAttackTree, {'tree_id':TAT_id, 'is_deleted':False})
+        print(tree_nodes)
+        ta_tree_nodes = []
+        if tree_nodes:
+            tat_json_tree = build_ta_tree_json(tree_nodes)
+            print(tat_json_tree)
+            tat_list_tree = flatten_node_tree(tat_json_tree, TAT_id)
+            print("------------------------------------technical attack tree list--------------------------------")
+            print(tat_list_tree)
+            
+            for node in tat_list_tree:
+                node_data = [node['node_id'], node['parent_id'], node['node_type'], node['node_Text'], node['af_value'], node['af_level'], node['gate'], node['values']]
+                ta_tree_nodes.append(tuple(node_data))
+            print(ta_tree_nodes)
+            TAT_rows.extend(ta_tree_nodes)
         # print(TAT_rows)
         if TAT_rows:
             attack_trees = Generate_tree_dictionary(TAT_id, TAT_rows) 
@@ -70,11 +127,26 @@ def Generate_tree_dictionary(TAT_id, tree_rows):
     return tree_dictionary
 
 def generate_word_report(TAT_id, TAT_name, output_path, Document):
-    tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM technical_tree WHERE Node_ID like '{TAT_id}_Node%'""")
-    if not tree_rows:
+    # tree_rows = DB.execute_db(f"""SELECT Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values" FROM technical_tree WHERE Node_ID like '{TAT_id}_Node%'""")
+    tree_rows = []
+    tree_nodes = get_instances(TechnicalAttackTree, {'tree_id':TAT_id, 'is_deleted':False})
+    print(tree_nodes)
+    if not tree_nodes:
         print(f"No data found for TAT ID: {TAT_id}")
         return
-
+    ta_tree_nodes = []
+    if tree_nodes:
+        tat_json_tree = build_ta_tree_json(tree_nodes)
+        print(tat_json_tree)
+        tat_list_tree = flatten_node_tree(tat_json_tree, TAT_id)
+        print("------------------------------------technical attack tree list--------------------------------")
+        print(tat_list_tree)
+        
+        for node in tat_list_tree:
+            node_data = [node['node_id'], node['parent_id'], node['node_type'], node['node_Text'], node['af_value'], node['af_level'], node['gate'], node['values']]
+            ta_tree_nodes.append(tuple(node_data))
+        print(ta_tree_nodes)
+        tree_rows.extend(ta_tree_nodes)
     tree_dictionary = Generate_tree_dictionary(TAT_id, tree_rows)
     if not tree_dictionary:
         print(f"Failed to generate tree dictionary for TAT ID: {TAT_id}")

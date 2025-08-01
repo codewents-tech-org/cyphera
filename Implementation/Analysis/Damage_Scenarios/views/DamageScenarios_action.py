@@ -84,7 +84,7 @@ from Analysis.Damage_Scenarios.config.damage_scenarios_config import PROPERTY_CO
 from components.table.multiselect_combo import MultiSelectComboSelector
 from components.propertypanel.property_input_components import PropertyInputFactory
 from styles.property_panel_style import property_save_button_style
-
+import components.table.table_row_indicator as TRI
 from PyQt5.QtCore import pyqtSignal
 import controllers.TableValueHighlight as TVH
 import components.action_panel as action_panel
@@ -182,63 +182,52 @@ class DS_Module(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)  # <--- THIS IS CRITICAL
         self.update_button_states()
         self.previous_text = None
-
-    def on_row_selection_changed(self, selected, deselected): 
+    def on_row_selection_changed(self, selected, deselected):
         """
-        Reacts to a change in selected table row and emits structured row data.
-
-        Extracts data from the currently selected row and emits it via the `row_selected` signal,
-        which triggers UI updates in the property panel.
-
-        Parameters:
-        -----------
-        selected : QItemSelection
-            Newly selected rows.
-        deselected : QItemSelection
-            Previously selected rows.
-
-        Emits:
-        -------
-        row_selected : pyqtSignal
-            Emitted with a dict payload containing:
-            {
-                "sender": "Table",
-                "event": "row_selected",
-                "data": {
-                    "ID": "...",
-                    "Name": "...",
-                    ...
-                }
-            }
-
-        See Also:
-        ---------
-        - display_row_data_in_panel (connected slot)
+        Handles row selection:
+        - Emits structured row data
+        - Highlights only the selected row's sidebar indicator (dot)
+        - Updates property panel and button states
         """
-        print("Table selection changed!")  # <--- DEBUG PRINT
+        print("Table selection changed!")  # DEBUG
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
 
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
-            data = {
-                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                "Impact": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                "Impact Category": self.table.item(row, 4).text() if self.table.item(row, 4) else "",
-                "Reasoning": self.table.item(row, 5).text() if self.table.item(row, 5) else "",
-                "Comments": self.table.item(row, 6).text() if self.table.item(row, 6) else ""
-            }
+        current_row = self.table.currentRow()
+        total_rows = self.table.rowCount()
 
+        # ✅ Highlight selected dot
+        for row in range(total_rows):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Display data in property panel
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
+            # ✅ Emit signal
+            data = {
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Impact": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
+                "Impact Category": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
+                "Reasoning": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
+                "Comments": self.table.item(current_row, 6).text() if self.table.item(current_row, 6) else ""
+            }
             payload = {
                 "sender": "Table",
                 "event": "row_selected",
                 "data": data
             }
             self.row_selected.emit(payload)
-            print("Signal emitted!", payload)  # <--- DEBUG PRINT
+            print("Signal emitted!", payload)  # DEBUG
+
+        # ✅ Button enable/disable
+        self.update_button_states()
         interfaces.unsaved_changes = temp
 
+    
     def on_table_item_changed(self, item):
         # Defensive: skip if table is empty or no uuid map
         row = item.row()
@@ -292,6 +281,8 @@ class DS_Module(QWidget):
         for row_idx, ds in enumerate(scenarios):
             try:
                 self.table.insertRow(row_idx)
+                is_selected = (row_idx == self.table.currentRow())
+                self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
                 self.table.setItem(row_idx, 1, QTableWidgetItem(ds.ds_id))
                 self.table.setItem(row_idx, 2, QTableWidgetItem(ds.name))
                 self.add_combo_to_impact_cell(row_idx, ds.impact)
@@ -355,9 +346,27 @@ class DS_Module(QWidget):
 
     def on_DS_property_name_changed(self): PVD.on_property_multiline_changed(self.table, 2, self.DS_name_input)
     def on_DS_property_impact_changed(self):
-        print("Impact change fired:", self.DS_impact_input.currentText())
+        new_value = self.DS_impact_input.currentText()
+        print("Impact change fired:", new_value)
         PVD.on_property_singleselect_changed(self.table, 3, self.DS_impact_input)
-    def on_DS_property_impactcategory_changed(self): PVD.on_property_multiselect_changed(self.table, 4, self.DS_impact_category_input)
+
+        row = self.table.currentRow()
+        if hasattr(self, 'row_uuid_map') and row in self.row_uuid_map:
+            uuid = self.row_uuid_map[row]
+            DSM.update_damage_scenario(uuid, {"impact": new_value})
+            interfaces.unsaved_changes = True
+
+    def on_DS_property_impactcategory_changed(self):
+        PVD.on_property_multiselect_changed(self.table, 4, self.DS_impact_category_input)
+
+        row = self.table.currentRow()
+        if row >= 0 and hasattr(self, 'row_uuid_map') and row in self.row_uuid_map:
+            uuid = self.row_uuid_map[row]
+            selected = self.DS_impact_category_input.selected_items()
+            value = ", ".join(selected)
+            DSM.update_damage_scenario(uuid, {"impact_category": value})
+            interfaces.unsaved_changes = True
+
     def on_DS_property_description_changed(self): PVD.on_property_multiline_changed(self.table, 5, self.DS_reasoning_input)
     def on_DS_property_comment_changed(self): PVD.on_property_multiline_changed(self.table, 6, self.DS_comments_input)
     def display_selected_row(self):  
@@ -370,43 +379,28 @@ class DS_Module(QWidget):
 
     def build_property_panel(self):
         """
-        Dynamically builds the property input panel for Damage Scenarios.
-
-        This method uses the `PROPERTY_CONFIG` definition to generate labeled input widgets,
-        applies readonly state where necessary, binds signal handlers, and stores widgets
-        for later use. Also creates and adds a Save button if configured.
-
-        Effects:
-        --------
-        - Initializes self.DS_property_controls with input pairs.
-        - Creates widget attributes like name_input, DS_impact_input, etc.
-        - Connects Save button to property_save_clicked signal.
-        - Disables Save button initially.
-
-        Signals:
-        --------
-        - property_save_clicked : Emitted when Save is clicked with payload data.
-
-        See Also:
-        ---------
-        - PropertyInputFactory.create_common_property_input
-        - PropertyInputFactory.create_save_button
-        - DAMAGE_SCENARIOS_CONFIG
+        Dynamically builds the property input panel for Damage Scenarios using PROPERTY_CONFIG.
         """
         self.property_factory = PropertyInputFactory()
         for field in PROPERTY_CONFIG:
+            label = field["label"]
+            input_type = field["type"]
+            signal_handler = getattr(self, field.get("signal")) if field.get("signal") else None
+            items = field.get("items", None)
+            readonly = field.get("readonly", False)
+
             input_widget = self.property_factory.create_common_property_input(
-                field["label"],
-                field["type"],
-                self.property_layout,
-                self.DS_property_controls,
-                getattr(self, field.get("signal")) if field.get("signal") else None,
-                field.get("items")
+                label_text=label,
+                input_type=input_type,
+                layout=self.property_layout,
+                controls_list=self.DS_property_controls,
+                signal=signal_handler,
+                items=items,
+                setReadOnly=readonly
             )
 
-            if field.get("readonly"):
-                input_widget.setReadOnly(True)
-            setattr(self, f'DS_{field["label"].lower().replace(" ", "_")}_input', input_widget)
+            attr_name = f'DS_{label.lower().replace(" ", "_")}_input'
+            setattr(self, attr_name, input_widget)
 
         if SAVE_BUTTON.get("enabled"):
             self.save_button = self.property_factory.create_save_button(
@@ -427,72 +421,46 @@ class DS_Module(QWidget):
         """
         Loads and displays the selected table row's data into the property panel.
 
-        Clears each input field if the corresponding table cell is empty or uninitialized.
-        Then populates the property panel using the current row data.
-
-        Parameters:
-        -----------
-        data : dict
-            Dictionary containing row data emitted from the selection event. Example:
-            {
-                "sender": "Table",
-                "event": "row_selected",
-                "data": {
-                    "ID": "...",
-                    "Name": "...",
-                    ...
-                }
-            }
-
-        Effects:
-        --------
-        - Clears and fills input widgets for the selected row.
-        - Delegates final rendering to `ds_display_selected_row()`.
-
-        See Also:
-        ---------
-        - PVD.ds_display_selected_row
+        Uses table values to set each field in the DS_property_controls panel
+        by mapping column index to widget values.
         """
         print("[DEBUG] display_row_data_in_panel called with:", data)
         row = self.table.currentRow()
+        if row < 0:
+            return
 
         for i, (label, widget) in enumerate(self.DS_property_controls):
-            table_item = self.table.item(row, i + 1)
-            cell_widget = self.table.cellWidget(row, i + 1)
+            col = i + 1  # Skip sidebar (column 0)
+            table_item = self.table.item(row, col)
+            cell_widget = self.table.cellWidget(row, col)
 
-            should_clear = False
+            # 🔁 For multi-select / combo box
+            if hasattr(widget, "set_selected_items"):
+                text = table_item.text() if table_item else ""
+                selected_items = [x.strip() for x in text.split(",")] if text else []
+                widget.set_selected_items(selected_items)
 
-            # Handle multiselect or custom widgets
-            if hasattr(widget, "selected_items") or hasattr(widget, "get_selected_items"):
-                if not (hasattr(cell_widget, "selected_items") and cell_widget.selected_items()):
-                    should_clear = True
-                if should_clear and hasattr(widget, "set_text"):
-                    widget.set_text([])  # Clear multiselect with empty list
-                continue  # Skip further checks for this widget
+            # 🔁 For combo box (single-select)
+            elif hasattr(widget, "setCurrentText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setCurrentText(value)
 
-            # Standard text/combo widgets
-            if table_item is None or not table_item.text().strip():
-                should_clear = True
+            # 🔁 For plain text or multi-line fields
+            elif hasattr(widget, "setText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setText(value)
 
-            if should_clear:
-                if hasattr(widget, "set_text"):
-                    widget.set_text("")
-                elif hasattr(widget, "setPlainText"):
-                    widget.setPlainText("")
-                elif hasattr(widget, "setText"):
-                    widget.setText("")
-                elif hasattr(widget, "setCurrentText"):
-                    widget.setCurrentText("")
-                elif hasattr(widget, "clear"):
-                    widget.clear()
+            elif hasattr(widget, "setPlainText"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.setPlainText(value)
 
-        # Populate data from table
-        PVD.ds_display_selected_row(
-            self.table,
-            self.DS_property_controls,
-            self.property_panel_manager.property_panel,
-            self.property_panel_manager.toggle_button
-        )
+            elif hasattr(widget, "set_text"):
+                value = table_item.text().strip() if table_item and table_item.text() else ""
+                widget.set_text(value)
+
+        # Optional: open the panel if it’s collapsed
+        if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
+            self.property_panel_manager.toggle_button.click()
 
     def add_combo_to_impact_cell(self, row_index, current_value=None):
         from models.helper import DS_impact_menu

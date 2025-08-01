@@ -281,7 +281,7 @@ class GenerateReport_module(QWidget):
         self.loader.show()  # Show loader first
         QApplication.processEvents()  # Allow UI to update immediately
 
-        MSA.ManagementSummary_module().load_data()
+        # MSA.ManagementSummary_module().load_data()
         
         self.GenerateReport_table_list = [internal_name for internal_name, checkbox in self.checkboxes.items() if checkbox.isChecked()]
         self.GenerateReport_tables = [checkbox.text() for internal_name, checkbox in self.checkboxes.items() if checkbox.isChecked()]
@@ -850,7 +850,7 @@ class GenerateReport_module(QWidget):
                             doc.add_paragraph()  # Space before the Technical Attack Tree
 
                             # Now, add the Technical Attack Tree below the table
-                            # Update_TechnicalAttackTree_Dictionary(doc)                    
+                            Update_TechnicalAttackTree_Dictionary(doc)                    
 
                         elif table_name == 'riskcontrol_tree_home':
                             print("................................risk control tree.......................................")
@@ -884,57 +884,57 @@ class GenerateReport_module(QWidget):
                             # doc.add_paragraph()  # Space before the risk control tree
 
                             # Now, add the Risk Control Tree below the table
-                            # Update_RiskControlTree_Dictionary(doc)
+                            Update_RiskControlTree_Dictionary(doc)
 
                         elif table_name == 'attack_tree_home':
-                                print("................................attack tree.......................................")
-                                # Set column names
-                                column_names = ["ID", "Name", "Initial AFR", "Resid AFR", "TOE Configuration", "Comments"]
-                                doc_table = doc.add_table(rows=1, cols=len(column_names))
-                                header_cells = doc_table.rows[0].cells
-                                
-                                # Set header
-                                for i, col_name in enumerate(column_names):
-                                    paragraph = header_cells[i].paragraphs[0]
-                                    run = paragraph.add_run(col_name)
-                                    run.font.color.rgb = RGBColor(0, 0, 0)
-                                    run.font.bold = True
+                            print("................................attack tree.......................................")
+                            # Set column names
+                            column_names = ["ID", "Name", "Initial AFR", "Resid AFR", "TOE Configuration", "Comments"]
+                            doc_table = doc.add_table(rows=1, cols=len(column_names))
+                            header_cells = doc_table.rows[0].cells
+                            
+                            # Set header
+                            for i, col_name in enumerate(column_names):
+                                paragraph = header_cells[i].paragraphs[0]
+                                run = paragraph.add_run(col_name)
+                                run.font.color.rgb = RGBColor(0, 0, 0)
+                                run.font.bold = True
+                                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                                header_cells[i]._element.get_or_add_tcPr().append(
+                                    parse_xml(r'<w:shd {} w:fill="D3D3D3"/>'.format(nsdecls('w')))
+                                )
+                            
+                            # Fetch rows from database
+                            # rows = DB.execute_db(f"SELECT id, name, InitialAFR, ResidAFR, toe_configuration, comments FROM attack_tree_home;")
+                            rows = get_instances(AttackTreeHome, {'is_deleted':False})
+                            # Populate the table and apply color based on AFR level
+                            for instance in rows:
+                                row_cells = doc_table.add_row().cells
+                                row = [instance.id, instance.name, instance.initial_afr, instance.resid_afr, instance.toe_configuration_id, instance.comments]
+                                for i, value in enumerate(row):
+                                    row_cells[i].text = str(value)
+                                    paragraph = row_cells[i].paragraphs[0]
                                     paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                                    header_cells[i]._element.get_or_add_tcPr().append(
-                                        parse_xml(r'<w:shd {} w:fill="D3D3D3"/>'.format(nsdecls('w')))
-                                    )
-                                
-                                # Fetch rows from database
-                                # rows = DB.execute_db(f"SELECT id, name, InitialAFR, ResidAFR, toe_configuration, comments FROM attack_tree_home;")
-                                rows = get_instances(AttackTreeHome, {'is_deleted':False})
-                                # Populate the table and apply color based on AFR level
-                                for instance in rows:
-                                    row_cells = doc_table.add_row().cells
-                                    row = [instance.id, instance.name, instance.initial_afr, instance.resid_afr, instance.toe_configuration_id, instance.comments]
-                                    for i, value in enumerate(row):
-                                        row_cells[i].text = str(value)
-                                        paragraph = row_cells[i].paragraphs[0]
-                                        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                                        
-                                        # Apply background color for "Initial AFR" based on the afr_level_color_map
-                                        if column_names[i] == "Initial AFR":
-                                            init_AFR_level_text = str(value)
-                                            if init_AFR_level_text in afr_level_color_map:
-                                                color_code = afr_level_color_map[init_AFR_level_text]
-                                                row_cells[i]._element.get_or_add_tcPr().append(
-                                                    parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color_code))
-                                                )
+                                    
+                                    # Apply background color for "Initial AFR" based on the afr_level_color_map
+                                    if column_names[i] == "Initial AFR":
+                                        init_AFR_level_text = str(value)
+                                        if init_AFR_level_text in afr_level_color_map:
+                                            color_code = afr_level_color_map[init_AFR_level_text]
+                                            row_cells[i]._element.get_or_add_tcPr().append(
+                                                parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color_code))
+                                            )
 
-                                        # Apply background color for "Resid AFR" based on the afr_level_color_map
-                                        if column_names[i] == "Resid AFR":
-                                            resid_AFR_level_text = str(value)
-                                            if resid_AFR_level_text in afr_level_color_map:
-                                                color_code = afr_level_color_map[resid_AFR_level_text]
-                                                row_cells[i]._element.get_or_add_tcPr().append(
-                                                    parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color_code))
-                                                )
-                                # Update_AttackTree_Dictionary(doc)  
-                
+                                    # Apply background color for "Resid AFR" based on the afr_level_color_map
+                                    if column_names[i] == "Resid AFR":
+                                        resid_AFR_level_text = str(value)
+                                        if resid_AFR_level_text in afr_level_color_map:
+                                            color_code = afr_level_color_map[resid_AFR_level_text]
+                                            row_cells[i]._element.get_or_add_tcPr().append(
+                                                parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color_code))
+                                            )
+                            Update_AttackTree_Dictionary(doc)  
+            
                         else:
                             if table_name == 'threat':
                                 print("................................threat.......................................")
@@ -1633,7 +1633,7 @@ class GenerateReport_module(QWidget):
 
         # Parse the cleaned HTML using BeautifulSoup
         soup = BeautifulSoup(cleaned_html, 'html.parser')
-
+        print("soup : ", soup)
         # Remove any heading or paragraph before a table (assumed to be table name)
         for tag in soup.find_all(['h1', 'h2', 'h3', 'p']):
             if tag.find_next_sibling() and tag.find_next_sibling().name == 'table':
@@ -1642,7 +1642,7 @@ class GenerateReport_module(QWidget):
         # Create a new Word document if none is provided
         if doc is None:
             doc = Document()
-
+        print(soup.descendants)
         # Handle text, tables, and images
         for element in soup.descendants:
             if isinstance(element, str):
@@ -1687,6 +1687,8 @@ class GenerateReport_module(QWidget):
         # Query to retrieve content from the TOE_Description table
         # result = DB.execute_db('SELECT content FROM TOE_Description')
         result = get_first_instance(SystemDescription, {'toe_id':1})
+        print(result)
+        print("result data : ", result.content)
         
         # Return the HTML content if available, else return None
         return result.content if result else None
@@ -1694,7 +1696,7 @@ class GenerateReport_module(QWidget):
     def retrieve_text_from_db2(self):
         # Query to retrieve content from the Scope table
         # result = DB.execute_db('SELECT scope_content FROM scope_description')
-        result = get_first_instance(SystemDescription, {'scope_id':1})
+        result = get_first_instance(ScopeDescription, {'scope_id':1})
         
         # Return the HTML content if available, else return None
         return result.scope_content if result else None

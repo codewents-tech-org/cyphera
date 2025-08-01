@@ -5,6 +5,7 @@ from controllers.schema_manager import (
     delete_all_instance, bulk_update_instances, get_max_numeric_suffix
 )
 from controllers.database_tables.analysis_tables import DamageScenarios  # Your ORM model
+import Analysis.models.analysis_synchronization as AS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,9 @@ def persist_damage_scenario_changes():
         entry['changed'] = False  # reset
     if updates:
         bulk_update_instances(DamageScenarios, updates)
+
+        AS.update_threat_TS_from_DS()
+        AS.update_risktreatement_data()
 
 # ==================== UI-BUSINESS LOGIC ====================
 

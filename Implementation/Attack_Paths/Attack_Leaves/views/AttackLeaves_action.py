@@ -66,7 +66,7 @@ class Attack_Leaves(QWidget):
     # Load Attack Leaves data from the database
     def load_data(self):
         self.loader = RoundLoader(self, label_text="Loading Attack Leaves Data...")
-        self.loader.show()
+        #self.loader.show()
         QApplication.processEvents()
 
         self.table.itemChanged.disconnect(self.find_duplicates)
@@ -74,7 +74,7 @@ class Attack_Leaves(QWidget):
         self.table.itemChanged.connect(self.find_duplicates)
         self.update_button_states()
         interfaces.unsaved_changes = False
-        self.loader.close()
+        #self.loader.close()
 
     def attack_leaves_load_data(self):
         self.table.setRowCount(0)
@@ -188,10 +188,16 @@ class Attack_Leaves(QWidget):
 
     def Add_Record(self): 
         self.table.setFocus()
-        self.table.itemChanged.disconnect(self.find_duplicates)
+        
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except TypeError:
+            pass  # It wasn't connected, safe to continue
+
         self.create_attack_leaf_and_insert_row()
         self.update_button_states()
         interfaces.unsaved_changes = True
+
         self.table.itemChanged.connect(self.find_duplicates)
 
     def Delete_Record(self): 

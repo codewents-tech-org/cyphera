@@ -70,3 +70,37 @@ selectedleafnode_box_style = f"""
                 border-radius: 10px;
                 }}
         """
+
+node_textbox_style = f"""
+        QTextEdit {{
+                border: none;
+                background-color: transparent;
+                font-size: 13px;
+                font-family: {node_font_family};
+        }}
+        """
+
+attackpaths_gate_style = """
+                QPushButton {
+                background-color: rgba(0, 0, 0, 0);  /* Transparent background */
+                border: none;  /* No border */
+                color: black;  /* Text color */
+                font-family: 'Roboto';  /* Set font to Roboto */
+                font-weight: bold;  /* Bold text */
+                font-size: 16px;  /* Font size 10 */
+                }
+                QPushButton:hover {
+                background-color: #D6F8F8;  /* Optional hover color */
+                }
+        """
+
+attackpaths_disablegate_style = """
+                QPushButton {
+                background-color: rgba(0, 0, 0, 0);  /* Transparent background */
+                border: none;  /* No border */
+                color: black;  /* Text color */
+                font-family: 'Roboto';  /* Set font to Roboto */
+                font-weight: bold;  /* Bold text */
+                font-size: 16px;  /* Font size 10 */
+                }
+        """

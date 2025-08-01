@@ -115,7 +115,7 @@ class PropertyInputFactory:
         }
     def create_common_property_input(
         self, label_text: str, input_type: str,
-        layout, controls_list, signal=None, items=None
+        layout, controls_list, signal=None, items=None,setReadOnly=None
     ):
         """
         Create a styled property input widget and add it to the provided layout.

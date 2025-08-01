@@ -177,8 +177,6 @@ class MisuseCases(QWidget):
     def submit_changes(self):
         self.table.setFocus()
         persist_misusecase_changes()
-        #AS.sync_misuse_cases_with_threats()
-        #AS.sync_assumptions_with_securityClaims()
         self.update_button_states()
         interfaces.unsaved_changes = False
 

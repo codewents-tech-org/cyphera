@@ -7,6 +7,9 @@ from controllers.tablemodel import NodeType, ReferenceTrees, AttackTree, Technic
 from Attack_Paths.models.afr_calculation import calculate_afr_values
 from controllers.schema_manager import get_instances, get_first_instance, update_instance
 from Attack_Paths.models.afr_level_calculation import calculate_afr_Level
+from Attack_Paths.Technical_Attack_Tree.controllers.backend_tat_table_update import update_technical_tree_table
+from Attack_Paths.RiskControl_Tree.controllers.backend_rct_table_update import update_riskcontrol_tree_table
+from Attack_Paths.Attack_Tree.controllers.backend_at_table_update import update_attack_tree_table
 
 import logging
 logger = logging.getLogger(__name__)
@@ -29,12 +32,20 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
                 print(f"Technical Trees: {technical_tree_ids}, Risk Control Trees: {risk_control_tree_ids}, Attack Trees: {attack_tree_ids}")
                 for tree in technical_tree_ids:
                     update_afr(tree, "technical_tree")
+                
+                if tree_id:
+                    update_technical_tree_table(tree, "technical_tree")
 
                 for tree in risk_control_tree_ids:
                     update_afr(tree, "risk_control_tree")
+                    update_technical_tree_table(tree, "risk_control_tree")
+                    update_riskcontrol_tree_table(tree)
 
                 for tree in attack_tree_ids:
                     update_afr(tree, "attack_tree")
+                    update_technical_tree_table(tree, "attack_tree")
+                    update_riskcontrol_tree_table(tree)
+                    update_attack_tree_table(tree)
 
             case "risk_control_tree":
                 tat_ids, rtc_ids, at_ids = collect_trees_by_updated_leaf(updated_leaf_list, tree_id)
@@ -51,9 +62,18 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
 
                 for tree in risk_control_tree_ids:
                     update_afr(tree, "risk_control_tree")
+                    update_technical_tree_table(tree, "risk_control_tree")
+                    update_riskcontrol_tree_table(tree)
+                
+                if tree_id:
+                    update_technical_tree_table(tree, "risk_control_tree")
+                    update_riskcontrol_tree_table(tree)
 
                 for tree in attack_tree_ids:
                     update_afr(tree, "attack_tree")
+                    update_technical_tree_table(tree, "attack_tree")
+                    update_riskcontrol_tree_table(tree)
+                    update_attack_tree_table(tree)
 
             case "attack_tree":
                 tat_ids, rtc_ids, at_ids = collect_trees_by_updated_leaf(updated_leaf_list, tree_id)
@@ -67,9 +87,19 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
 
                 for tree in risk_control_tree_ids:
                     update_afr(tree, "risk_control_tree")
+                    update_technical_tree_table(tree, "risk_control_tree")
+                    update_riskcontrol_tree_table(tree)
 
                 for tree in attack_tree_ids:
                     update_afr(tree, "attack_tree")
+                    update_technical_tree_table(tree, "attack_tree")
+                    update_riskcontrol_tree_table(tree)
+                    update_attack_tree_table(tree)
+                
+                if tree_id:
+                    update_technical_tree_table(tree_id, "attack_tree")
+                    update_riskcontrol_tree_table(tree_id)
+                    update_attack_tree_table(tree_id)
             
             case None:
                 if updated_leaf_list:
@@ -84,9 +114,14 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
 
                     for tree in risk_control_tree_ids:
                         update_afr(tree, "risk_control_tree")
+                        update_technical_tree_table(tree, "risk_control_tree")
+                        update_riskcontrol_tree_table(tree)
 
                     for tree in attack_tree_ids:
                         update_afr(tree, "attack_tree")
+                        update_technical_tree_table(tree, "attack_tree")
+                        update_riskcontrol_tree_table(tree)
+                        update_attack_tree_table(tree)
         return True
     except Exception as e:
         logger.error(f"Error in update_afr_values: {e}")

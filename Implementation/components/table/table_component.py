@@ -69,9 +69,10 @@ Change History:
 
 import logging
 
-from PyQt5.QtGui import QFontMetrics  # pylint: disable=no-name-in-module
-from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem  # pylint: disable=no-name-in-module
-from PyQt5.QtCore import Qt, QSize  # pylint: disable=no-name-in-module
+from PyQt5.QtGui import QFontMetrics ,QColor, QBrush # pylint: disable=no-name-in-module
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem,QStyledItemDelegate  # pylint: disable=no-name-in-module
+from PyQt5.QtCore import Qt, QSize 
+# pylint: disable=no-name-in-module
 
 from models import helper  # pylint: disable=import-error
 
@@ -168,3 +169,4 @@ class TableComponent:
             table.horizontalHeader().setStretchLastSection(True)
         except Exception:  # noqa: E722
             logger.exception("Failed to setup table headers")
+            

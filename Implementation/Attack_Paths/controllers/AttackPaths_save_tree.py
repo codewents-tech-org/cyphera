@@ -2,8 +2,12 @@
 import sys
 from PyQt5.QtWidgets import QComboBox, QMessageBox, QComboBox
 import controllers.DatabaseCreator as DB
-# from Attack_Paths.controllers.Update_AllTrees_SubTrees import Update_AttackTree_ExistingControlTree, Update_AttackTree_ExistingTechnicalTree, Update_ControlTree_ExistingTechnicalTree
-from Attack_Paths.controllers.Update_Connected_Modules import update_threat_table, update_technicaltree_table, update_riskcontroltree_table, update_attacktree_table, update_risktreatment_table
+from Attack_Paths.controllers.Update_AllTrees_SubTrees import Update_AttackTree_ExistingControlTree, Update_AttackTree_ExistingTechnicalTree, Update_ControlTree_ExistingTechnicalTree
+from Attack_Paths.controllers.Update_Connected_Modules import Update_Threat_Table, Update_TechnicalTree_Table, Update_RiskControlTree_Table, Update_AttackTree_Table, Update_RiskTreatment_Table
+from controllers.schema_manager import (
+    get_instances, get_first_instance, create_instance, update_instance, delete_instances_like, bulk_insert_instances
+)
+from controllers.database_tables.attack_paths_tables import AttackTree, RiskControlTree, TechnicalTreeHome
 
 import logging
 logger = logging.getLogger(__name__)
@@ -12,7 +16,11 @@ def Save_TechnicalTree(tree, tree_id, nodes):
     logger.info(f"Saving {tree_id} technical tree")
     try:
         data_to_insert = []
-        DB.update_db('DELETE FROM technical_tree WHERE Node_ID LIKE ?', (f'{tree_id}_node%',))
+        delete_instances_like(
+            TechnicalTreeHome,     # ORM class
+            "node_id",         # SQLAlchemy attribute name (check your model!)
+            f"{tree_id}_node%"
+        )
         for control, node_info in nodes.items():
             Values_list = node_info['values']
             values = []
@@ -39,12 +47,24 @@ def Save_TechnicalTree(tree, tree_id, nodes):
                                     nodes[control]['y']),
                                 )
         
-        sql_command = '''
-            INSERT OR REPLACE INTO technical_tree 
-            (Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values", "Image_Type", "x", "y")
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        '''
-        DB.executemany_db(sql_command, data_to_insert)
+        instances = [
+            TechnicalTreeHome(
+                node_id=row[0],
+                parent_id=row[1],
+                node_type=row[2],
+                text=row[3],
+                value=row[4],
+                af_text=row[5],
+                gate_type=row[6],
+                values=row[7],
+                image_type=row[8],
+                x=row[9],
+                y=row[10],
+            )
+            for row in data_to_insert
+        ]
+
+        bulk_insert_instances(instances)
         
         logger.info(f"Updating all tree leaf data and attack leaves table")
         tree.Update_Leaf_Data()
@@ -53,11 +73,11 @@ def Save_TechnicalTree(tree, tree_id, nodes):
         logger.info(f"Updating Technical tree in Attack tree")
         Update_AttackTree_ExistingTechnicalTree(tree_id)
         logger.info(f"Updating Threat table")
-        update_threat_table()
+        Update_Threat_Table()
         logger.info(f"Updating Attack tree table")
-        update_attacktree_table()
+        Update_AttackTree_Table()
         logger.info(f"Updating Risk treatment table")
-        update_risktreatment_table()
+        Update_RiskTreatment_Table()
         # QMessageBox.information(None, "Save", f"{'technical_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:
@@ -68,7 +88,11 @@ def Save_TechnicalTree(tree, tree_id, nodes):
 def Save_RiskControlTree(tree, tree_id, nodes):
     logger.info(f"Saving {tree_id} Risk Control Tree")
     try:
-        DB.update_db('DELETE FROM riskcontrol_tree WHERE Node_ID LIKE ?', (f'{tree_id}_node%',))
+        delete_instances_like(
+            RiskControlTree,
+            "node_id",
+            f"{tree_id}_node%"
+        )
         data_to_insert = []
         for control, node_info in nodes.items():
             Values_list = node_info['values']
@@ -103,25 +127,37 @@ def Save_RiskControlTree(tree, tree_id, nodes):
                                     nodes[control]['y']),
                                 )
         
-        sql_command = '''
-            INSERT OR REPLACE INTO riskcontrol_tree 
-            (Node_ID, Parent_ID, Node_Type, Text, Value, AF_Text, Gate_Type, "Values", "Image_Type", "x", "y")
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        '''
-        DB.executemany_db(sql_command, data_to_insert)
+        instances = [
+            RiskControlTree(
+                node_id=row[0],
+                parent_id=row[1],
+                node_type=row[2],
+                text=row[3],
+                value=row[4],
+                af_text=row[5],
+                gate_type=row[6],
+                values=row[7],
+                image_type=row[8],
+                x=row[9],
+                y=row[10],
+            )
+            for row in data_to_insert
+        ]
+
+        bulk_insert_instances(instances)
         
         logger.info(f"Updating all tree leaf data and attack leaves table")
         tree.Update_Leaf_Data()
         logger.info(f"Updating Risk Control Tree in Attack tree")
         Update_AttackTree_ExistingControlTree(tree_id)
         logger.info(f"Updating Technical tree table")
-        update_technicaltree_table()
+        Update_TechnicalTree_Table()
         logger.info(f"Updating Threat table")
-        update_threat_table()
+        Update_Threat_Table()
         logger.info(f"Updating Attack tree table")
-        update_attacktree_table()
+        Update_AttackTree_Table()
         logger.info(f"Updating Risk treatment table")
-        update_risktreatment_table()
+        Update_RiskTreatment_Table()
         # QMessageBox.information(None, "Save", f"{'riskcontrol_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:
@@ -132,7 +168,11 @@ def Save_RiskControlTree(tree, tree_id, nodes):
 def Save_AttackTree(tree, tree_id, nodes):
     logger.info(f"Saving {tree_id} attack tree")
     try:
-        DB.update_db('DELETE FROM attack_tree WHERE Node_ID LIKE ?', (f'{tree_id}_node%',))
+        delete_instances_like(
+            AttackTree,     # The ORM model for the attack_tree table
+            "node_id",      # The SQLAlchemy attribute (usually node_id, not Node_ID)
+            f"{tree_id}_node%"
+        )
         data_to_insert = []
         for threat, node_info in nodes.items():
             Values_list = node_info['values']
@@ -185,25 +225,39 @@ def Save_AttackTree(tree, tree_id, nodes):
                                     nodes[threat]['y']),
                                 )
         
-        sql_command = '''
-            INSERT OR REPLACE INTO attack_tree 
-            (Node_ID, Parent_ID, Node_Type, Text, AF_Value, AF_Text, RF_Value, RF_Text, Gate_Type, "Values", "Image_Type", "x", "y")
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        '''
-        DB.executemany_db(sql_command, data_to_insert)
+        instances = [
+            AttackTree(
+                node_id=row[0],
+                parent_id=row[1],
+                node_type=row[2],
+                text=row[3],
+                af_value=row[4],
+                af_text=row[5],
+                rf_value=row[6],
+                rf_text=row[7],
+                gate_type=row[8],
+                values=row[9],
+                image_type=row[10],
+                x=row[11],
+                y=row[12],
+            )
+            for row in data_to_insert
+        ]
+
+        bulk_insert_instances(instances)
 
         logger.info(f"Updating all tree leaf data and attack leaves table")
         tree.Update_Leaf_Data()
         logger.info(f"Updating Risk Control Tree table")
-        update_riskcontroltree_table()
+        Update_RiskControlTree_Table()
         logger.info(f"Updating Technical tree table")
-        update_technicaltree_table()
+        Update_TechnicalTree_Table()
         logger.info(f"Updating Threat table")
-        update_threat_table()
+        Update_Threat_Table()
         logger.info(f"Updating attack tree table")
-        update_attacktree_table()
+        Update_AttackTree_Table()
         logger.info(f"Updating Risk treatment table")
-        update_risktreatment_table()
+        Update_RiskTreatment_Table()
         # QMessageBox.information(None, "Save", f"{'attack_tree'.replace('_', ' ').title()} {tree_id} saved successfully")
     
     except Exception as e:

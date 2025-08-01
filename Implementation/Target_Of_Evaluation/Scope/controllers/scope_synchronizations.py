@@ -118,8 +118,7 @@ def update_threat_data(scope_id, asset_id):
 
 def sync_linked_modules():
     AS.update_threatscenario_from_threat()
-    AS.update_risktreatement_data()
-    AS.remove_orphaned_attack_tree_rows()
-    AS.update_attack_tree_text()
     AS.sync_attack_tree_with_threats()
+    AS.remove_orphaned_attack_tree_rows()
+    AS.update_risktreatement_data()
     AS.remove_nonexistent_threat_scenarios_from_Risk_data()

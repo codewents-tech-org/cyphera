@@ -74,9 +74,8 @@ Change History:
 """
 
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal,Qt
 import logging
-
 try:
     from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton
     from PyQt5.QtGui import QIcon
@@ -107,6 +106,8 @@ class SidebarWidget(QWidget):
 
     def __init__(self, parent=None, index=None, tree_indicator=False):
         super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setStyleSheet("background: transparent;")
         self.index = index
 
         layout = QHBoxLayout()

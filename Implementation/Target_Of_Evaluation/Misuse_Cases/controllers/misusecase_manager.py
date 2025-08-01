@@ -17,9 +17,9 @@ last_misusecase_number = None
 def generate_new_misusecase_id():
     global last_misusecase_number
     if last_misusecase_number is None:
-        last_misusecase_number = get_max_numeric_suffix(Misusecases, "misuse_cases_id", prefix="MUC")
+        last_misusecase_number = get_max_numeric_suffix(Misusecases, "misuse_cases_id", prefix="MC")
     last_misusecase_number += 1
-    return f"MUC-{last_misusecase_number}"
+    return f"MC-{last_misusecase_number}"
 
 def load_all_misusecases():
     logger.info("🔄 Loading misuse cases from DB...")
@@ -96,6 +96,9 @@ def persist_misusecase_changes():
 
     if updates:
         bulk_update_instances(Misusecases, updates)
+        AS.sync_misuse_cases_with_threats()
+        AS.sync_assumptions_with_securityClaims()
+        
 
 def create_misusecase_and_insert_row(self):
     misusecase_id = generate_new_misusecase_id()

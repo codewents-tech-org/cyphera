@@ -108,7 +108,7 @@ from controllers.database_tables.target_of_evaluation_tables import TOEConfigura
 import logging
 import Security_Measurement.Security_Claims.controllers.securityclaims_manager as SCM
 import components.table.multioption_selector as MOS
-import components.table.tree_row_indicator as TRI
+import components.table.table_row_indicator as TRI
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +119,8 @@ class SecurityClaims_Module(QWidget):
     row_selected = pyqtSignal(dict)
     def __init__(self):
         super().__init__()
+        self.row_uuid_map = {}
+        self.previous_text = "" 
         self.initUI()
 
 
@@ -186,8 +188,19 @@ class SecurityClaims_Module(QWidget):
                 self.table_widget.selectRow(0)    
 
     def on_row_selection_changed(self, selected, deselected):
-        if self.table.currentRow() >= 0:
+        current_row = self.table.currentRow()
+
+        # ✅ Update property panel
+        if current_row >= 0:
             self.display_row_data_in_panel(None)
+
+        # ✅ Update dot highlight
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Update button states
         self.update_button_states()
 
 
@@ -252,7 +265,8 @@ class SecurityClaims_Module(QWidget):
             row_idx = self.table.rowCount()
             self.table.insertRow(row_idx)
 
-            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget())
+            is_selected = (row_idx == self.table.currentRow())
+            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
             self.table.setItem(row_idx, 1, QTableWidgetItem(claim.sc_id))
             self.table.setItem(row_idx, 2, QTableWidgetItem(claim.name or ""))
 
@@ -409,10 +423,6 @@ class SecurityClaims_Module(QWidget):
         # Persist changes to DB
         SCM.persist_security_claim_changes()
 
-        # Sync downstream
-        print("claims syschronsiaiton to risk data")
-        AS.update_riskData_from_securityClaims()
-        AS.remove_claims_from_risk_data()
 
         self.update_button_states()
         interfaces.unsaved_changes = False

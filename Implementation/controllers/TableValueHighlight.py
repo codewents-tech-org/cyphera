@@ -14,7 +14,7 @@ def on_row_selection_changed(table):
                 selected_row = selected_indexes[0].row()
                 if row_idx == selected_row:
                     sidebar_widget = table.cellWidget(selected_row, 0)
-                    if sidebar_widget: sidebar_widget.round_button.setIcon(QIcon(P.selectedraw_icon))
+                    if sidebar_widget: sidebar_widget.round_button.setIcon(QIcon(P.selectedrow_icon))
                 else:
                     sidebar_widget = table.cellWidget(row_idx, 0)
                     if sidebar_widget: sidebar_widget.round_button.setIcon(QIcon(P.deselectedrow_icon))

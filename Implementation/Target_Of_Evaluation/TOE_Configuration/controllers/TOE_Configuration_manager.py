@@ -9,7 +9,7 @@ from controllers.schema_manager import (
     get_first_instance
 )
 from controllers.tablemodel import TOEConfiguration
-
+import Analysis.models.analysis_synchronization as AS
 logger = logging.getLogger(__name__)
 
 # In-memory cache
@@ -115,6 +115,8 @@ def persist_toe_configuration_changes():
 
     if updates:
         bulk_update_instances(TOEConfiguration, updates)
+        AS.sync_toe_configuration()
+        
 
 # ========================== UI Business Logic ==========================
 
@@ -143,9 +145,9 @@ def generate_new_toec_id():
     global last_toec_number
 
     if last_toec_number is None:
-        last_toec_number = get_max_numeric_suffix(TOEConfiguration, "toe_configuration_id", prefix="TOEC")
+        last_toec_number = get_max_numeric_suffix(TOEConfiguration, "toe_configuration_id", prefix="Cfg")
         if last_toec_number == 0:
             last_toec_number = 0
 
     last_toec_number += 1
-    return f"TOEC-{last_toec_number}"
+    return f"Cfg-{last_toec_number}"

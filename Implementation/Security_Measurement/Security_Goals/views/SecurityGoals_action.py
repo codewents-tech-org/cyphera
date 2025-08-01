@@ -109,7 +109,7 @@ from controllers.tablemodel import TOEConfiguration, SecurityClaims
 import Security_Measurement.Security_Goals.controllers.security_goals_manager as SGM
 from Security_Measurement.Security_Goals.controllers.security_goals_manager import SECURITY_GOALS_CACHE
 import components.table.multioption_selector as MOS
-
+from components.table.multioption_selector import  TSMultiSelectComboBox
 
 class SecurityGoals_Module(QWidget):
     create_property_panel_signal = pyqtSignal()
@@ -178,9 +178,11 @@ class SecurityGoals_Module(QWidget):
 
 
     def on_row_selection_changed(self, selected, deselected):
-        TVH.on_row_selection_changed(self.table)
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
+        current_row = self.table.currentRow()
+
+        # ✅ Emit selection payload (your original logic)
+        if current_row >= 0:
+            row = current_row
             data = {
                 "ID": self.table.item(row, 0).text() if self.table.item(row, 0) else "",
                 "Name": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
@@ -196,53 +198,102 @@ class SecurityGoals_Module(QWidget):
             }
             self.row_selected.emit(payload)
 
+        # ✅ Update the sidebar dot highlight
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Update button state
+        self.update_button_states()
+
     def load_data(self):
-        self.loader = RoundLoader(self, label_text="Loading...")
-        self.loader.show()
+        self.loader = RoundLoader(self, label_text="Loading Security Goals...")
+        #self.loader.show()
         QApplication.processEvents()
 
         try:
-            # -- Prepare responsible and TOE config options (analogue to security_property_list)
-            goal_rows = SGM.load_all_security_goals()
-            self.security_property_list = [
-                f"{g.sg_id}::{g.name}" for g in goal_rows if g.sg_id and g.name
-            ]  # For compatibility with controls pattern
-
-            # (If you have a MultiSelect for security_goals, use as below)
-            # self.security_goals_multiselect_input.additem(self.security_property_list)
-
             self.table.itemChanged.disconnect(self.find_duplicates)
-            rows = SGM.load_all_security_goals()
+        except Exception:
+            pass
 
-            self.table.setRowCount(0)
-            for idx, obj in enumerate(rows):
-                self.table.insertRow(idx)
-                self.table.setCellWidget(idx, 0, TRI.SidebarWidget())
-                self.table.setItem(idx, 1, QTableWidgetItem(obj.sg_id or ""))
-                self.table.setItem(idx, 2, QTableWidgetItem(obj.name or ""))
+        # 🔁 Load goals
+        goal_rows = SGM.load_all_security_goals()
+        self.row_uuid_map = {}
 
-                # Multi-select for Responsible (replace with actual multi-select logic if needed)
-                resp_combo = MOS.TSMultiSelectComboBox(self.security_property_list, parent=self.table)
-                selected_resp = [r.strip() for r in (obj.responsible or "").split(",") if r.strip()]
-                resp_combo.set_text(selected_resp)
-                resp_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
-                self.table.setCellWidget(idx, 3, resp_combo)
+        # 🔁 Prepare Responsible options
+        responsible_set = set()
+        for g in goal_rows:
+            if g.responsible:
+                responsible_set.update(r.strip() for r in g.responsible.split(",") if r.strip())
+        responsible_options = sorted(list(responsible_set)) or ["Customer", "Supplier"]
 
-                # TOE config (replace with your own logic)
-                toe_combo = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration, parent=self.table)
-                selected_toe = [obj.toe_configuration_id] if obj.toe_configuration_id else []
-                toe_combo.set_text(selected_toe)
-                self.table.setCellWidget(idx, 4, toe_combo)
+        # 🔁 Prepare TOE Configuration options
+        toe_rows = get_instances(TOEConfiguration, {'is_deleted': False})
+        toe_options = [
+            f"{t.toe_configuration_id}::{t.toe_configuration_name}"
+            for t in toe_rows if t.toe_configuration_id and t.toe_configuration_name
+        ]
+        # ✅ Store for property panel display logic
+        self.formatted_toe_configuration = toe_options
 
-                self.table.setItem(idx, 5, QTableWidgetItem(obj.description or ""))
-                self.table.setItem(idx, 6, QTableWidgetItem(obj.comments or ""))
-                self.row_uuid_map[idx] = obj.uuid
+        # ✅ Populate responsible and TOE configuration dropdowns in the property panel
+        if hasattr(self, 'security_goals_responsible_input'):
+            self.security_goals_responsible_input.additem(responsible_options)
+            self.security_goals_responsible_input.set_text('')
 
-            self.table.itemChanged.connect(self.find_duplicates)
-            interfaces.unsaved_changes = False
-        finally:
-            self.loader.close()
+        # ✅ Update the dropdown in the property panel
+        if hasattr(self, 'security_goals_toe_configuration_input'):
+            self.security_goals_toe_configuration_input.clear_items()
+            self.security_goals_toe_configuration_input.additem(self.formatted_toe_configuration)
+            self.security_goals_toe_configuration_input.set_text('')
 
+
+
+        # 🧱 Configure table
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels([
+            "", "ID", "Name", "Responsible", "TOE Configuration", "Description", "Comments"
+        ])
+        self.table.setAlternatingRowColors(True)
+        self.table.clearContents()
+        self.table.setRowCount(0)
+
+        # 🧩 Populate each row
+        for idx, g in enumerate(goal_rows):
+            self.table.insertRow(idx)
+
+            # Sidebar
+            is_selected = (idx == self.table.currentRow())
+            self.table.setCellWidget(idx, 0, TRI.SidebarWidget(row_idx=idx, selected=is_selected))
+            # ID and Name
+            self.table.setItem(idx, 1, QTableWidgetItem(g.sg_id or ""))
+            self.table.setItem(idx, 2, QTableWidgetItem(g.name or ""))
+
+            # Responsible multiselect
+            resp_combo = TSMultiSelectComboBox(responsible_options, parent=self.table)
+            selected_resp = [r.strip() for r in (g.responsible or "").split(",") if r.strip()]
+            resp_combo.set_text(selected_resp)
+            resp_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
+            self.table.setCellWidget(idx, 3, resp_combo)
+
+            # TOE Configuration multiselect
+            toe_combo =TSMultiSelectComboBox(toe_options, parent=self.table)
+            toe_ids = [tid.strip() for tid in (g.toe_configuration_id or "").split(",") if tid.strip()]
+            selected_toe = [opt for opt in toe_options if opt.split("::")[0] in toe_ids]            
+            toe_combo.set_text(selected_toe)
+            toe_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
+            self.table.setCellWidget(idx, 4, toe_combo)
+
+            # Description and Comments
+            self.table.setItem(idx, 5, QTableWidgetItem(g.description or ""))
+            self.table.setItem(idx, 6, QTableWidgetItem(g.comments or ""))
+
+            self.row_uuid_map[idx] = g.uuid
+
+        self.table.itemChanged.connect(self.find_duplicates)
+        interfaces.unsaved_changes = False
+        #self.loader.close()
 
     def select_first_row(self): 
         if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
@@ -367,16 +418,14 @@ class SecurityGoals_Module(QWidget):
             return
 
         self.table.removeRow(selected_row)
-        AS.remove_securityGoal_from_riskData()
-        AS.sync_securityGoals_from_securityControl()
         self.update_button_states()
         interfaces.unsaved_changes = True
 
     def submit_changes(self):
         self.table.setFocus()
+        print("-----------step1--------------")
         SGM.persist_security_goal_changes()
-        AS.remove_securityGoal_from_riskData()
-        AS.sync_securityGoals_from_securityControl()
+        print("-----------step2--------------")
         self.update_button_states()
         interfaces.unsaved_changes = False
 
@@ -429,12 +478,24 @@ class SecurityGoals_Module(QWidget):
 
     def display_row_data_in_panel(self, data):
         row = self.table.currentRow()
+        if row < 0:
+            return
+
         for i, (label, widget) in enumerate(self.security_goals_property_controls):
-            table_item = self.table.item(row, i + 1)
-            if hasattr(widget, "set_text"):
-                widget.set_text(table_item.text() if table_item and table_item.text() else "")
+            if label == "Responsible":
+                combo = self.table.cellWidget(row, 3)
+                if combo and hasattr(widget, "set_text"):
+                    widget.set_text(combo.selected_items())
+            elif label == "TOE Configuration":
+                combo = self.table.cellWidget(row, 4)
+                if combo and hasattr(widget, "set_text"):
+                    widget.set_text(combo.selected_items())
+            else:
+                table_item = self.table.item(row, i + 1)  # Skip sidebar
+                if table_item and hasattr(widget, "set_text"):
+                    widget.set_text(table_item.text())
 
-
+    # Optional: Call this if you’re doing visual refresh or toggle syncing
         PVD.SecurityGoals_display_selected_row(
             self.table,
             self.security_goals_property_controls,

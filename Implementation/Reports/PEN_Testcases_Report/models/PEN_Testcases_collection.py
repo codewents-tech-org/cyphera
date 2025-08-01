@@ -1,6 +1,10 @@
 
 import controllers.DatabaseCreator as DB
 import re
+from controllers.schema_manager import get_instances
+from controllers.tablemodel import AttackTree, RiskControlTree, Threats, SecurityControls
+from Attack_Paths.Attack_Tree.controllers.database_to_at import build_at_tree_json
+from Target_Of_Evaluation.Scope.Scope_MindMap.tree_id_converter import rename_attacktree_node_ids_flat
 
 
 Penetration_Severity_Levels = {
@@ -32,12 +36,78 @@ Penetration_Severity_Levels = {
 }
 
 
+def flatten_node_tree(node, base_id):
+    flat_nodes = []
+    counter = {"index": 0}
+
+    def _walk(n, parent_id):
+        node_idx = counter["index"]
+        node_id = f"{base_id}_node_{node_idx}"
+        counter["index"] += 1
+
+        # Base node structure
+        flat_node = {
+            "node_id": node_id,
+            "parent_id": parent_id,
+            "node_type": n.get("node_type"),
+            "node_label": n.get("node_label"),
+            "node_Text": n.get("node_Text"),
+            "af_level": n.get("af_level"),
+            "rf_level": n.get("rf_level")
+        }
+
+        flat_nodes.append(flat_node)
+
+        # Recurse into children
+        for child in n.get("childrens", []):
+            _walk(child, node_id)
+
+    _walk(node, parent_id=None)
+    return flat_nodes
+
 def Update_PEN_Testcases():
     # Fetch data from the attack_tree table
-    nodes = DB.execute_db("SELECT Node_ID, Text, AF_Text, RF_Text, Node_Type FROM attack_tree")
+    
+    # threats = DB.execute_db("SELECT threat_id, security_properties FROM threat")
+    print("-----------------------------------threats--------------------------------")
+    threats = []
+    threat_data = get_instances(Threats, {'is_deleted':'False'})
+    if threat_data:
+        for instance in threat_data:
+            threats.append(tuple([instance.threat_id, instance.security_properties]))
+    print(threats)
+    
+    # security_controls = DB.execute_db("SELECT id, properties FROM security_controls")
+    print("-----------------------------------security controls--------------------------------")
+    security_controls = []
+    sc_data = get_instances(SecurityControls, {'is_deleted':'False'})
+    if sc_data:
+        for instance in sc_data:
+            security_controls.append(tuple([instance.scc_id, instance.security_goal_id]))
+    print(security_controls)
+
+    # nodes = DB.execute_db("SELECT Node_ID, Text, AF_Text, RF_Text, Node_Type FROM attack_tree")
+    print("-----------------------------------attack tree--------------------------------")
+    nodes = []
+    for threat_id, security_property in threats: 
+        print(threat_id)
+        tree_nodes = get_instances(AttackTree, {'tree_id':threat_id, 'is_deleted':False})
+        print(tree_nodes)
+        attack_tree_nodes = []
+        if tree_nodes:
+            at_json_tree = build_at_tree_json(tree_nodes)
+            print(at_json_tree)
+            at_list_tree = flatten_node_tree(at_json_tree, threat_id)
+            print("------------------------------------attack tree list--------------------------------")
+            print(at_list_tree)
+            
+            for node in at_list_tree:
+                node_data = [node['node_id'], node['node_Text'], node['af_level'], node['rf_level'], node['node_type']]
+                attack_tree_nodes.append(tuple(node_data))
+            print(attack_tree_nodes)
+        nodes.extend(attack_tree_nodes)
+    print("------------------------------------final attack tree--------------------------------")
     print(nodes)
-    threats = DB.execute_db("SELECT threat_id, security_properties FROM threat")
-    security_controls = DB.execute_db("SELECT id, properties FROM security_controls")
 
     def group_nodes_by_threat_id(nodes):
         grouped_nodes = {}
@@ -130,19 +200,11 @@ def Update_PEN_Testcases():
                 suffix = text[suffix_start:].strip()  # Get everything after the keyword
                 return suffix
         return "object"  # Default if no keywords match
-    
-    # security_controls = DB.execute_db("SELECT properties FROM security_controls")
-
-    # # Organize nodes by type
-    # head_nodes = [node for node in nodes if node[3] == "head"]
-    # riskcontrol_head_nodes = [node for node in nodes if node[3] == "riskcontrol head"]
-    # riskcontrol_leaf_nodes = [node for node in nodes if node[3] == "riskcontrol leaf"]
-    # leaf_nodes = [node for node in nodes if node[3] == "leaf"]
 
     for threat_id, threat_nodes in grouped_nodes.items():
         print(f"Processing threat_id: {threat_id}")
 
-        # Initialize test cases for the current threat_id
+        # Initialize Test Scenarios for the current threat_id
         # threat_testcases = {}
 
     # for threat_id, threat_nodes in grouped_nodes.items():
@@ -160,18 +222,18 @@ def Update_PEN_Testcases():
             # Extract matching keywords for the description
             vulnerabilities = [kw for kw in keywords if kw.lower() in text.lower()]
             vulnerabilities_str = ", ".join(vulnerabilities) if vulnerabilities else "general vulnerabilities"
-            testcase_id = f"TC_{testcase_number}"
+            testcase_id = f"TS_{testcase_number}"
             testcase_number += 1
             penetration_testcases[testcase_id] = {}
-            penetration_testcases[testcase_id]["Object Type"] = "Threat Test case"
-            penetration_testcases[testcase_id]["Test case Name"] =  text
-            penetration_testcases[testcase_id]["Test Case Description"] = f"The {suffix} will be vulnerable to attacks due to {vulnerabilities_str}"
+            penetration_testcases[testcase_id]["Object Type"] = "Threat Test Scenario"
+            penetration_testcases[testcase_id]["Test Scenario Name"] =  text
+            penetration_testcases[testcase_id]["Test Scenario Description"] = f"The {suffix} will be vulnerable to attacks due to {vulnerabilities_str}"
             penetration_testcases[testcase_id]["Test Goal"] = " "
                 # "Severity": penetration_severity_levels.get(af_value, "Unknown"),
             penetration_testcases[testcase_id]["Severity"] = severity
             penetration_testcases[testcase_id]["Vulnerability Description"] = " "
             penetration_testcases[testcase_id]["Business Impacts"] = " "
-            penetration_testcases[testcase_id]["Recommendations"] =" "
+            # penetration_testcases[testcase_id]["Recommendations"] =" "
         
             penetration_all_testcases[testcase_id] = penetration_testcases[testcase_id]
             
@@ -228,19 +290,19 @@ def Update_PEN_Testcases():
 
                     combined_conditions = ", ".join(conditions) if conditions else ""
 
-                    sub_testcase_id = f"TC_{testcase_number}"
+                    sub_testcase_id = f"TS_{testcase_number}"
                     testcase_number += 1
                     penetration_testcases[testcase_id][sub_testcase_id] = {}
                     penetration_testcases[testcase_id][sub_testcase_id] = {}
-                    penetration_testcases[testcase_id][sub_testcase_id]["Object Type"]= "Control Test case"
-                    penetration_testcases[testcase_id][sub_testcase_id]["Test case Name"] =  clean_c_text
-                    penetration_testcases[testcase_id][sub_testcase_id]["Test Case Description"] = f"The test case checks if the {clean_c_suffix} meets the level of security in {parent_suffix}."
-                    penetration_testcases[testcase_id][sub_testcase_id]["Test Goal"] = f"The test case should ensure that the condition {combined_conditions} is satisfied"
+                    penetration_testcases[testcase_id][sub_testcase_id]["Object Type"]= "Control Test Scenario"
+                    penetration_testcases[testcase_id][sub_testcase_id]["Test Scenario Name"] =  clean_c_text
+                    penetration_testcases[testcase_id][sub_testcase_id]["Test Scenario Description"] = f"The Test Scenario checks if the {clean_c_suffix} meets the level of security in {parent_suffix}."
+                    penetration_testcases[testcase_id][sub_testcase_id]["Test Goal"] = f"The Test Scenario should ensure that the condition {combined_conditions} is satisfied"
                         # "Severity": penetration_severity_levels.get(af_value, "Unknown"),
                     penetration_testcases[testcase_id][sub_testcase_id]["Severity"] = "Critical"
                     penetration_testcases[testcase_id][sub_testcase_id]["Vulnerability Description"] = " "
                     penetration_testcases[testcase_id][sub_testcase_id]["Business Impacts"] = " "
-                    penetration_testcases[testcase_id][sub_testcase_id]["Recommendations"] = " "
+                    # penetration_testcases[testcase_id][sub_testcase_id]["Recommendations"] = " "
                     
                     penetration_all_testcases[sub_testcase_id] = penetration_testcases[testcase_id][sub_testcase_id]
 
@@ -255,26 +317,26 @@ def Update_PEN_Testcases():
                             else:
                                 clean_cl_suffix = " "  # Default value if no match is found
 
-                            sub_sub_testcase_id = f"TC_{testcase_number}"
+                            sub_sub_testcase_id = f"TS_{testcase_number}"
                             testcase_number += 1
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id] = {}
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id] = {}
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id] = {}
-                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Object Type"] = "Leaf Sub Test case"
-                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Test case Name"] = cl_text
-                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Test Case Description"] = f"This test case checks if {clean_cl_suffix} is protected from any malicious action, Otherwise attacker can misuse the service"
+                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Object Type"] = "Leaf Sub Test Scenario"
+                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Test Scenario Name"] = cl_text
+                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Test Scenario Description"] = f"This Test Scenario checks if {clean_cl_suffix} is protected from any malicious action, Otherwise attacker can misuse the service"
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Test Goal"] = " "
                                 # "Severity": penetration_severity_levels.get(af_value, "Unknown"),
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Severity"] = severity2
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Vulnerability Description"] = f"The {clean_c_suffix} will be vulnerable due to exploit in the {clean_cl_suffix}"
                             penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Business Impacts"] = f"If the system is attacked , the system features will be compromised and lead to unintended activities"
-                            penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Recommendations"] = f"It is recommended to protect {clean_cl_suffix} from any malicious action"
+                            # penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]["Recommendations"] = f"It is recommended to protect {clean_cl_suffix} from any malicious action"
                             
                             penetration_all_testcases[sub_sub_testcase_id] = penetration_testcases[testcase_id][sub_testcase_id][sub_sub_testcase_id]
 
 
             def get_security_property_from_threat_id(threat_id):
-                """Fetch the security property for a given threat_id."""
+                #Fetch the security property for a given threat_id.
                 for threat in threats:
                     if threat[0] == threat_id:
                         return threat[1]
@@ -316,71 +378,20 @@ def Update_PEN_Testcases():
                         clean_l_suffix = " "    
                 # if l_node_id.startswith(node_id):  # Check if it's under the current head
                     severity3 = penetration_severity_levels.get(l_rf_value, "")
-                    sub_testcase_id = f"TC_{testcase_number}"
+                    sub_testcase_id = f"TS_{testcase_number}"
                     testcase_number += 1
                     penetration_testcases[testcase_id][sub_testcase_id] = {}
-                    penetration_testcases[testcase_id][sub_testcase_id]["Object Type"] = "Leaf Test case"
-                    penetration_testcases[testcase_id][sub_testcase_id]["Test case Name"] = l_text
-                    penetration_testcases[testcase_id][sub_testcase_id]["Test Case Description"] = f"This test case checks if the {clean_l_suffix} is protected from {security_description}, Otherwise attacker can create a {security_description2} using the service  "
+                    penetration_testcases[testcase_id][sub_testcase_id]["Object Type"] = "Leaf Test Scenario"
+                    penetration_testcases[testcase_id][sub_testcase_id]["Test Scenario Name"] = l_text
+                    penetration_testcases[testcase_id][sub_testcase_id]["Test Scenario Description"] = f"This Test Scenario checks if the {clean_l_suffix} is protected from {security_description}, Otherwise attacker can create a {security_description2} using the service  "
                     penetration_testcases[testcase_id][sub_testcase_id]["Test Goal"] = " "
                                 # "Severity": penetration_severity_levels.get(af_value, "Unknown"),
                     penetration_testcases[testcase_id][sub_testcase_id]["Severity"] = severity3
                     penetration_testcases[testcase_id][sub_testcase_id]["Vulnerability Description"] = f"The {suffix} will be {security_description3} and vulnerable to attacks due to {clean_l_suffix}"
                     penetration_testcases[testcase_id][sub_testcase_id]["Business Impacts"] = f"If the system is attacked, the system features will be {security_description4}"
-                    penetration_testcases[testcase_id][sub_testcase_id]["Recommendations"] = f"It is recommended to protect {clean_l_suffix} from any {security_description5}"
+                    # penetration_testcases[testcase_id][sub_testcase_id]["Recommendations"] = f"It is recommended to protect {clean_l_suffix} from any {security_description5}"
                     
                     penetration_all_testcases[sub_testcase_id] = penetration_testcases[testcase_id][sub_testcase_id]
+
     print("----------",penetration_all_testcases)
     return penetration_testcases, penetration_all_testcases
-    rows = DB.execute_db("SELECT id, name, mitigates, assumptions, comment FROM riskcontrol_tree_home")
-    Penetration_Severity_Levels  = { "High": "Critical", "Medium": "High", "Low": "Medium", "Very Low": "Low"}
-    testcase_number = 1
-    Penetration_Testcases = {}
-    Penetration_All_Testcases = {}
-
-    leaf_rows = DB.execute_db("SELECT id, name, AFR_Level FROM attack_leaf_home")
-    for (leaf_id, leaf_name, level) in leaf_rows:
-        Testcase_ID = f"TC_{testcase_number}"
-        testcase_number += 1
-        Penetration_Testcases[Testcase_ID] = {}
-        Penetration_Testcases[Testcase_ID]["Object_Type"] = "Test case"
-        Text = f"{leaf_id} {leaf_name}"
-        Penetration_Testcases[Testcase_ID]["Testcase_Name"] = Text
-        Penetration_Testcases[Testcase_ID]["Description"] = f"Evaluate the time taken, tools used, attacker skill set, required knowledge, and access level for {leaf_name}"
-        Penetration_Testcases[Testcase_ID]["Parameter_Evaluated"] = "Elapsed Time, Specialized Equipment, Expertise, Knowledge of the target, Access to the target"
-        Penetration_Testcases[Testcase_ID]["Severity"] = Penetration_Severity_Levels[level]
-        
-        Penetration_All_Testcases[Testcase_ID] = Penetration_Testcases[Testcase_ID]
-
-    for (Circum_ID, Circum_Name, mitigates, assumptions, comment) in rows:
-        CTestcase_ID = f"TC_{testcase_number}"
-        testcase_number += 1
-        Penetration_Testcases[CTestcase_ID] = {}
-        Penetration_Testcases[CTestcase_ID]["Object_Type"] = "Test case"
-        riskcontrol_name = Circum_Name.replace('Risk_Control - ', '')
-        Penetration_Testcases[CTestcase_ID]["Testcase_Name"] = f"{Circum_ID} {riskcontrol_name}"
-        Penetration_Testcases[CTestcase_ID]["Description"] = f"Evaluate the level of security of {riskcontrol_name}"
-        Penetration_Testcases[CTestcase_ID]["Parameter_Evaluated"] = "Elapsed Time, Specialized Equipment, Expertise, Knowledge of the target, Access to the target"
-        Penetration_Testcases[CTestcase_ID]["Severity"] = "Critical"
-
-        Penetration_All_Testcases[CTestcase_ID] = Penetration_Testcases[CTestcase_ID]
-
-        circum_node_list = DB.execute_db(f"SELECT Text, Node_Type, AF_Text FROM riskcontrol_tree WHERE Node_ID like '{Circum_ID}_node%'")
-        for (Text, nodetype, AFR_level) in circum_node_list:
-            if nodetype == 'leaf':
-                Testcase_ID = f"TC_{testcase_number}"
-                testcase_number += 1
-                Penetration_Testcases[CTestcase_ID][Testcase_ID] = {}
-                Penetration_Testcases[CTestcase_ID][Testcase_ID] = {}
-                Penetration_Testcases[CTestcase_ID][Testcase_ID]["Object_Type"] = "Sub Test case"
-                Penetration_Testcases[CTestcase_ID][Testcase_ID]["Testcase_Name"] = Text
-                Leaf_id = Text.split(' ')[0]
-                leaf_name = Text.removeprefix(f"{Leaf_id} ")
-                Penetration_Testcases[CTestcase_ID][Testcase_ID]["Description"] = f"Evaluate the time taken, tools used, attacker skill set, required knowledge, and access level for {leaf_name}"
-                Penetration_Testcases[CTestcase_ID][Testcase_ID]["Parameter_Evaluated"] = "Elapsed Time, Specialized Equipment, Expertise, Knowledge of the target, Access to the target"
-                Penetration_Testcases[CTestcase_ID][Testcase_ID]["Severity"] = Penetration_Severity_Levels[AFR_level]
-                
-                Penetration_All_Testcases[Testcase_ID] = Penetration_Testcases[CTestcase_ID][Testcase_ID]
-
-    return Penetration_Testcases, Penetration_All_Testcases
-

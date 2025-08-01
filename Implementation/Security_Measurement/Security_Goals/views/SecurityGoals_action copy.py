@@ -93,6 +93,8 @@ from Security_Measurement.Security_Goals.views.securitygoals_toolbar_panel impor
 from Security_Measurement.Security_Goals.config.security_goals_config import PROPERTY_CONFIG, SAVE_BUTTON
 from components.propertypanel.property_input_components import PropertyInputFactory
 from styles.property_panel_style import property_save_button_style
+from controllers.security_goals_manager import generate_new_sg_id, create_security_goal
+
 from PyQt5.QtCore import pyqtSignal
 import controllers.TableValueHighlight as TVH
 import controllers.DatabaseCreator as DB
@@ -387,35 +389,34 @@ class SecurityGoals_Module(QWidget):
     def refrash_existing_entries(self): refrash_existing_entries(self)
     
     def add_new_entry(self):
-    from controllers.security_goals_manager import generate_new_sg_id, create_security_goal
+    
+        self.table.setFocus()
+        self.table.itemChanged.disconnect(self.find_duplicates)
 
-    self.table.setFocus()
-    self.table.itemChanged.disconnect(self.find_duplicates)
+        # 1. Generate new ID
+        new_sg_id = generate_new_sg_id()
 
-    # 1. Generate new ID
-    new_sg_id = generate_new_sg_id()
+        # 2. Create new Security Goal (in-memory only)
+        new_goal = create_security_goal(
+            sg_id=new_sg_id,
+            name="",
+            responsible="",
+            toe_configuration_id="",
+            description="",
+            comments=""
+        )
 
-    # 2. Create new Security Goal (in-memory only)
-    new_goal = create_security_goal(
-        sg_id=new_sg_id,
-        name="",
-        responsible="",
-        toe_configuration_id="",
-        description="",
-        comments=""
-    )
+        if not new_goal:
+            QMessageBox.critical(self, "Error", f"Failed to create Security Goal {new_sg_id}")
+            return
 
-    if not new_goal:
-        QMessageBox.critical(self, "Error", f"Failed to create Security Goal {new_sg_id}")
-        return
+        # 3. Add to table
+        TAR.SecurityGoals_add_new_entry(self.table, new_goal)
 
-    # 3. Add to table
-    TAR.SecurityGoals_add_new_entry(self.table, new_goal)
-
-    # 4. Mark UI dirty
-    self.update_button_states()
-    interfaces.unsaved_changes = True
-    self.table.itemChanged.connect(self.find_duplicates)
+        # 4. Mark UI dirty
+        self.update_button_states()
+        interfaces.unsaved_changes = True
+        self.table.itemChanged.connect(self.find_duplicates)
 
 
     def delete_entry(self):

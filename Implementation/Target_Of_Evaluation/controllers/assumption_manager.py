@@ -15,9 +15,9 @@ last_assumption_number = None
 def generate_new_assumption_id():
     global last_assumption_number
     if last_assumption_number is None:
-        last_assumption_number = get_max_numeric_suffix(Assumptions, "assumption_id", prefix="ASSUM")
+        last_assumption_number = get_max_numeric_suffix(Assumptions, "assumption_id", prefix="AS")
     last_assumption_number += 1
-    return f"ASSUM-{last_assumption_number}"
+    return f"AS-{last_assumption_number}"
 
 def load_all_assumptions():
     logger.info("🔄 Loading assumptions from DB...")
@@ -88,6 +88,7 @@ def persist_assumption_changes():
 
     if updates:
         bulk_update_instances(Assumptions, updates)
+        AS.sync_assumptions_with_securityClaims()
 
 def create_assumption_and_insert_row(self):
     assumption_id = generate_new_assumption_id()

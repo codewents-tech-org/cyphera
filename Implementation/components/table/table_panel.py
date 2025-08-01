@@ -77,6 +77,8 @@ from components.table.tree_row_indicator import SidebarWidget as TreeRowIndicato
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QTableWidgetItem
 import components.table.table_row_indicator as TRI
+from components.table.custom_delegates import TransparentBackgroundDelegate
+
 
 
 logger = logging.getLogger(__name__)
@@ -187,15 +189,6 @@ class TablePanelWrapper(QWidget):
         self.container = self  # ✅ Now this object itself is the QWidget
 
     def create_table_panel(self):
-        """ 
-        Set up the table widget panel layout with delegate and scroll policies.
-
-        Args:
-            self (QWidget): The parent widget that will hold the table and layout.
-
-        Returns:
-            None
-        """
         try:
             self.table = QTableWidget()
             self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -206,20 +199,20 @@ class TablePanelWrapper(QWidget):
             self.table.cellClicked.connect(self.display_selected_row)
             self.table.setStyleSheet(table_style.table_style)
             self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            
-            # Install the custom delegate for single-line editing.
+
+            # ✅ Set default delegate
             self.table.setItemDelegate(SingleLineDelegate(self.table))
-            
-            # Create a layout and add the table.
+
+            # ✅ Make column 0 transparent
+            self.table.setColumnWidth(0, 40)
+
+            # ✅ Layout setup
             self.table_layout = QVBoxLayout()
-            self.table_layout.setContentsMargins(10, 10, 10, 10)  # Add 10px margin on all sides
+            self.table_layout.setContentsMargins(10, 10, 10, 10)
             self.table_layout.addWidget(self.table)
-            
-            self.container = QWidget()                      # ✅ container to wrap the layout
-            self.setLayout(self.table_layout)  # ✅ Since self is now a QWidget     # ✅ set layout on container
-            
-            
-         
+
+            self.container = QWidget()
+            self.setLayout(self.table_layout)
 
         except (AttributeError, TypeError):
             logger.exception("Failed to create table panel")

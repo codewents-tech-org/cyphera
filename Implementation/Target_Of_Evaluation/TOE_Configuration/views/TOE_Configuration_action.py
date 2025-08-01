@@ -201,7 +201,6 @@ class TOEConfigurationModule(QWidget):
 
     def submit_changes(self):
         persist_toe_configuration_changes()
-        # AS.sync_toe_configuration()
         self.update_button_states()
         interfaces.unsaved_changes = False
 

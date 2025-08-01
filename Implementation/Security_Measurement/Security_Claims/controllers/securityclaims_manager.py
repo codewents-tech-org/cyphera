@@ -2,6 +2,8 @@ import uuid
 import logging
 from controllers.schema_manager import create_instance, get_instances, delete_all_instance, bulk_update_instances, get_max_numeric_suffix
 from controllers.tablemodel import SecurityClaims
+import Analysis.models.analysis_synchronization as AS
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,10 @@ def persist_security_claim_changes():
     if updates:
         bulk_update_instances(SecurityClaims, updates)
         logger.info(f"[✅] Persisted {len(updates)} SecurityClaim updates.")
+        
+        # Sync downstream
+        AS.update_riskData_from_securityClaims()
+        AS.remove_claims_from_risk_data()
 
 # ========================== ID Helper ==========================
 

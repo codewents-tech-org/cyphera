@@ -100,11 +100,11 @@ def sync_threats_with_assets():
         else:
             expected_name = generate_name(asset_id, sp_in_threat)
             if threat.name != expected_name:
-                update_instance(Threats, {'threat_id': threat_id}, {'name': expected_name})
+                update_instance(Threats, {'threat_id': threat_id}, {'name': expected_name},{'is_deleted': 'Flase'})
 
     # ✅ Filter out threats present in ThreatCatalog
     catalog_entries = get_instances(ThreatCatalog, {})
-    catalog_threat_names = {entry.Threat for entry in catalog_entries if entry.Threat}
+    catalog_threat_names = {entry.threat_id for entry in catalog_entries if entry.threat_id}
     final_remove_list = [
         tid for tid in remove_threat_list
         if existing_threat_maps[tid].name not in catalog_threat_names
@@ -114,7 +114,7 @@ def sync_threats_with_assets():
     for threat_id in final_remove_list:
         # insert into `threat_trash` (if that model/table is defined — otherwise, log)
         logger.info(f"Soft-deleting threat {threat_id}")
-        delete_instance(Threats, {'threat_id': threat_id})
+        update_instance(Threats, {'threat_id': threat_id}, {'is_deleted': 'True'})
 
     # ✅ Insert new threats based on Assets
     for asset_id, sp_list in existing_assets_datas.items():
@@ -141,7 +141,7 @@ def sync_threats_with_assets():
                     comments="",
                     created_by="system",
                     updated_by="system",
-                    is_deleted=False
+                    is_deleted='False'
                 )
                 create_instance(new_threat)
                 print(new_threat)
@@ -313,16 +313,16 @@ def sync_attack_tree_with_threats():
 
     # ✅ Fetch all attack tree home rows
     attack_tree_rows = get_instances(AttackTreeHome, {})
-    attack_tree_map = {row.ath_id: row for row in attack_tree_rows}
+    attack_tree_map = {row.id: row for row in attack_tree_rows}
 
     # ✅ Sync/update or insert each Threat into AttackTreeHome
     for threat in threat_rows:
-        ath_id = threat.threat_id
-        if ath_id in attack_tree_map:
+        id = threat.threat_id
+        if id in attack_tree_map:
             # Update existing row if values differ
             update_instance(
                 AttackTreeHome,
-                {'ath_id': ath_id},
+                {'id': id},
                 {
                     'name': threat.name,
                     'initial_afr': threat.initia_afr,
@@ -330,11 +330,11 @@ def sync_attack_tree_with_threats():
                     'toe_configuration_id': threat.toe_configuration_id or ''
                 }
             )
-            logger.info(f"🔁 Updated attack_tree_home row for threat_id: {ath_id}")
+            logger.info(f"🔁 Updated attack_tree_home row for threat_id: {id}")
         else:
             # Insert new row
             new_row = AttackTreeHome(
-                ath_id=ath_id,
+                id=id,
                 name=threat.name,
                 initial_afr=threat.initia_afr,
                 resid_afr=threat.resid_afr,
@@ -345,13 +345,13 @@ def sync_attack_tree_with_threats():
                 is_deleted=False
             )
             create_instance(new_row)
-            logger.info(f"➕ Inserted attack_tree_home row for threat_id: {ath_id}")
+            logger.info(f"➕ Inserted attack_tree_home row for threat_id: {id}")
 
     # ✅ Remove attack_tree_home entries that no longer exist in the threats table
-    for ath_id in attack_tree_map:
-        if ath_id not in threat_ids:
-            delete_instance(AttackTreeHome, {'ath_id': ath_id})
-            logger.info(f"🗑️ Deleted orphaned attack_tree_home row for threat_id: {ath_id}")
+    for id in attack_tree_map:
+        if id not in threat_ids:
+            delete_instance(AttackTreeHome, {'id': id})
+            logger.info(f"🗑️ Deleted orphaned attack_tree_home row for threat_id: {id}")
 
 
 last_threat_number = None  # 🔁 Global tracker for threat ID
@@ -485,8 +485,8 @@ def sync_toe_configuration():
             filtered = [t for t in original if t in valid_toe_ids]
             if original != filtered:
                 new_val = ', '.join(filtered)
-                update_instance(AttackTreeHome, {'ath_id': ath.ath_id}, {'toe_configuration_id': new_val})
-                logger.info(f"✅ Updated AttackTreeHome {ath.ath_id}")
+                update_instance(AttackTreeHome, {'id': ath.id}, {'toe_configuration_id': new_val})
+                logger.info(f"✅ Updated AttackTreeHome {ath.id}")
 
     # ----------------------------
     # Step 8: Repopulate TOEConfigurationInManagementSummary
@@ -796,7 +796,7 @@ def sync_security_controls_with_attack():
     attack_tree_nodes = get_instances(AttackTree, {})
     rc_head_nodes = [
         node for node in attack_tree_nodes
-        if node.node_type and node.node_type.lower() == 'riskcontrol head' and node.text
+        if node.node_type and str(node.node_type).lower() == 'riskcontrol head' and node.text
     ]
 
     # ✅ Step 3: Build mapping from control_id prefix to Node_ID
@@ -995,6 +995,7 @@ def remove_threats_from_mitigation():
                 logger.info(f"✅ Updated RiskControlTreeHome {rc.id}: removed invalid threat IDs")
 
 def update_risktreatement_data():
+    print("-------------------------risktreatment------------------")
     logger.info("Updating Risk Treatment via ORM")
 
     try:

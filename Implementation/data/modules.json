@@ -217,8 +217,15 @@
 		  "class": "TraceabilityGraph_Module",
           "enabled": true,
           "licensed": true
+        },
+        {
+          "name": "Management Summary",
+          "icon": "assets/Images/management.svg",
+		  "file": "Summary.Management_Summary.views.ManagementSummary_action",
+		  "class": "ManagementSummary_module",
+          "enabled": true,
+          "licensed": true
         }
-
       ]
     },
     {
@@ -227,9 +234,16 @@
       "enabled": true,
       "licensed": true,
       "submodules": [
-
         {
-          "name": "PEN Test Scenario Report",
+          "name": "Generate Report",
+          "icon": "assets/Images/generate_report.svg",
+		  "file": "Reports.Generate_Reports.views.GenerateReport_action",
+		  "class": "GenerateReport_module",
+          "enabled": true,
+          "licensed": true
+        },
+        {
+          "name": "PEN Test Cases Report",
           "icon": "assets/Images/pen_test.svg",
 		  "file": "Reports.PEN_Testcases_Report.views.PENTestcasesReport_action",
 		  "class": "PenTestReportModule",
@@ -238,6 +252,5 @@
         }
       ]
     }
-
   ]
 }
