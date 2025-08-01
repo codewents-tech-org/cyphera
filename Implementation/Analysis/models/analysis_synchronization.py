@@ -415,12 +415,12 @@ def sync_toe_configuration():
     # ----------------------------
     sc_rows = get_instances(SecurityClaims, {})
     for sc in sc_rows:
-        if sc.toe_configuration:
-            original = [t.strip() for t in sc.toe_configuration.split(',') if t.strip()]
+        if sc.toe_configuration_id:
+            original = [t.strip() for t in sc.toe_configuration_id.split(',') if t.strip()]
             filtered = [t for t in original if t in valid_toe_ids]
             if original != filtered:
                 new_val = ', '.join(filtered)
-                update_instance(SecurityClaims, {'id': sc.scc_id}, {'toe_configuration': new_val})
+                update_instance(SecurityClaims, {'id': sc.scc_id}, {'toe_configuration_id': new_val})
                 logger.info(f"✅ Updated SecurityClaims {sc.scc_id}")
 
     # ----------------------------
@@ -428,12 +428,12 @@ def sync_toe_configuration():
     # ----------------------------
     sg_rows = get_instances(SecurityGoals, {})
     for sg in sg_rows:
-        if sg.toe_configuration:
-            original = [t.strip() for t in sg.toe_configuration.split(',') if t.strip()]
+        if sg.toe_configuration_id:
+            original = [t.strip() for t in sg.toe_configuration_id.split(',') if t.strip()]
             filtered = [t for t in original if t in valid_toe_ids]
             if original != filtered:
                 new_val = ', '.join(filtered)
-                update_instance(SecurityGoals, {'id': sg.id}, {'toe_configuration': new_val})
+                update_instance(SecurityGoals, {'id': sg.id}, {'toe_configuration_id': new_val})
                 logger.info(f"✅ Updated SecurityGoals {sg.id}")
 
     # ----------------------------
@@ -467,12 +467,12 @@ def sync_toe_configuration():
     # ----------------------------
     rd_rows = get_instances(RiskData, {})
     for rd in rd_rows:
-        if rd.toe_configuration:
-            original = [t.strip() for t in rd.toe_configuration.split(',') if t.strip()]
+        if rd.toe_configuration_id:
+            original = [t.strip() for t in rd.toe_configuration_id.split(',') if t.strip()]
             filtered = [t for t in original if t in valid_toe_ids]
             if original != filtered:
                 new_val = ', '.join(filtered)
-                update_instance(RiskData, {'id': rd.id}, {'toe_configuration': new_val})
+                update_instance(RiskData, {'id': rd.id}, {'toe_configuration_id': new_val})
                 logger.info(f"✅ Updated RiskData {rd.id}")
 
     # ----------------------------
