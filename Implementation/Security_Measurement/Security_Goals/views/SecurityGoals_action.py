@@ -118,9 +118,10 @@ class SecurityGoals_Module(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.init_ui()
-        self.previous_text = ""
+        
+        self.previous_text = "" 
         self.formatted_toe_configuration = []
+        self.init_ui()
 
     def init_ui(self):
         self.row_selected.connect(self.display_row_data_in_panel)
@@ -210,8 +211,12 @@ class SecurityGoals_Module(QWidget):
         self.update_button_states()
 
     def load_data(self):
-        self.loader = RoundLoader(self, label_text="Loading Security Goals...")
-        #self.loader.show()
+        """
+        Loads all Security Goals and related dropdown data, and populates the table and property panel.
+        """
+
+        # 🌀 Loader
+        self.loader = RoundLoader(self, label_text="Loading Security Goals Data...")
         QApplication.processEvents()
 
         try:
@@ -219,40 +224,31 @@ class SecurityGoals_Module(QWidget):
         except Exception:
             pass
 
-        # 🔁 Load goals
+        # 🔁 Load security goals
         goal_rows = SGM.load_all_security_goals()
         self.row_uuid_map = {}
 
-        # 🔁 Prepare Responsible options
+        # ✅ Load Responsible values
         responsible_set = set()
         for g in goal_rows:
             if g.responsible:
-                responsible_set.update(r.strip() for r in g.responsible.split(",") if r.strip())
-        responsible_options = sorted(list(responsible_set)) or ["Customer", "Supplier"]
+                responsible_set.update(val.strip() for val in g.responsible.split(",") if val.strip())
+        responsible_options = sorted(responsible_set) or ["Customer", "Supplier"]
+        self.security_goals_responsible_input.additem(responsible_options)
+        self.security_goals_responsible_input.set_text('')
 
-        # 🔁 Prepare TOE Configuration options
-        toe_rows = get_instances(TOEConfiguration, {'is_deleted': False})
-        toe_options = [
+        # ✅ Load TOE Configuration
+        toe_rows = get_instances(TOEConfiguration, {})
+        toe_configuration_options = [
             f"{t.toe_configuration_id}::{t.toe_configuration_name}"
             for t in toe_rows if t.toe_configuration_id and t.toe_configuration_name
         ]
-        # ✅ Store for property panel display logic
-        self.formatted_toe_configuration = toe_options
+        self.security_goals_toe_configuration_input.clear()
+        self.security_goals_toe_configuration_input.additem(toe_configuration_options)
+        self.security_goals_toe_configuration_input.set_text('')
+        self.formatted_toe_configuration = toe_configuration_options
 
-        # ✅ Populate responsible and TOE configuration dropdowns in the property panel
-        if hasattr(self, 'security_goals_responsible_input'):
-            self.security_goals_responsible_input.additem(responsible_options)
-            self.security_goals_responsible_input.set_text('')
-
-        # ✅ Update the dropdown in the property panel
-        if hasattr(self, 'security_goals_toe_configuration_input'):
-            self.security_goals_toe_configuration_input.clear()
-            self.security_goals_toe_configuration_input.additem(self.formatted_toe_configuration)
-            self.security_goals_toe_configuration_input.set_text('')
-
-
-
-        # 🧱 Configure table
+        # ✅ Setup table
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
             "", "ID", "Name", "Responsible", "TOE Configuration", "Description", "Comments"
@@ -261,41 +257,41 @@ class SecurityGoals_Module(QWidget):
         self.table.clearContents()
         self.table.setRowCount(0)
 
-        # 🧩 Populate each row
-        for idx, g in enumerate(goal_rows):
-            self.table.insertRow(idx)
+        # ✅ Populate table rows
+        for g in goal_rows:
+            row_idx = self.table.rowCount()
+            self.table.insertRow(row_idx)
 
-            # Sidebar
-            is_selected = (idx == self.table.currentRow())
-            self.table.setCellWidget(idx, 0, TRI.SidebarWidget(row_idx=idx, selected=is_selected))
-            # ID and Name
-            self.table.setItem(idx, 1, QTableWidgetItem(g.sg_id or ""))
-            self.table.setItem(idx, 2, QTableWidgetItem(g.name or ""))
+            is_selected = (row_idx == self.table.currentRow())
+            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
+            self.table.setItem(row_idx, 1, QTableWidgetItem(g.sg_id or ""))
+            self.table.setItem(row_idx, 2, QTableWidgetItem(g.name or ""))
 
-            # Responsible multiselect
-            resp_combo = TSMultiSelectComboBox(responsible_options, parent=self.table)
-            selected_resp = [r.strip() for r in (g.responsible or "").split(",") if r.strip()]
-            resp_combo.set_text(selected_resp)
-            resp_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
-            self.table.setCellWidget(idx, 3, resp_combo)
+            # Responsible
+            resp_widget = MOS.TSMultiSelectComboBox(responsible_options)
+            selected_resp = [val.strip() for val in (g.responsible or "").split(",") if val.strip()]
+            resp_widget.set_text(selected_resp)
+            self.table.setCellWidget(row_idx, 3, resp_widget)
 
-            # TOE Configuration multiselect
-            toe_combo =TSMultiSelectComboBox(toe_options, parent=self.table)
+            # TOE Configuration
+            toe_widget = MOS.TSMultiSelectComboBox(toe_configuration_options)
             toe_ids = [tid.strip() for tid in (g.toe_configuration_id or "").split(",") if tid.strip()]
-            selected_toe = [opt for opt in toe_options if opt.split("::")[0] in toe_ids]            
-            toe_combo.set_text(selected_toe)
-            toe_combo.model().dataChanged.connect(lambda: self.update_cell_to_cache(None))
-            self.table.setCellWidget(idx, 4, toe_combo)
+            matched_toe = [opt for opt in toe_configuration_options if opt.split("::")[0] in toe_ids]
+            toe_widget.set_text(matched_toe)
+            self.table.setCellWidget(row_idx, 4, toe_widget)
 
-            # Description and Comments
-            self.table.setItem(idx, 5, QTableWidgetItem(g.description or ""))
-            self.table.setItem(idx, 6, QTableWidgetItem(g.comments or ""))
+            # Description & Comments
+            self.table.setItem(row_idx, 5, QTableWidgetItem(g.description or ""))
+            self.table.setItem(row_idx, 6, QTableWidgetItem(g.comments or ""))
 
-            self.row_uuid_map[idx] = g.uuid
+            self.row_uuid_map[row_idx] = g.uuid
 
+
+        # ✅ Reconnect validation & save triggers
         self.table.itemChanged.connect(self.find_duplicates)
         interfaces.unsaved_changes = False
-        #self.loader.close()
+        self.loader.close()
+
 
     def select_first_row(self): 
         if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
@@ -348,55 +344,56 @@ class SecurityGoals_Module(QWidget):
 
     def add_new_entry(self):
         self.table.setFocus()
+
         try:
             self.table.itemChanged.disconnect(self.find_duplicates)
-        except Exception:
+        except TypeError:
             pass
 
-        new_sg_id = SGM.generate_new_sg_id()
-        sg_name = f"Security Goal {new_sg_id.split('-')[-1]}"
-        created = SGM.create_security_goal(sg_id=new_sg_id, name=sg_name)
-        if not created:
-            QMessageBox.critical(self, "Error", f"Could not create SecurityGoal {new_sg_id}")
+        # 🆕 Generate new Security Goal ID and name
+        sg_id = SGM.generate_new_sg_id()
+        name = f"Security Goal {sg_id.split('-')[-1]}"
+
+        # ➕ Create and cache it
+        goal = SGM.create_security_goal(sg_id, name)
+        if not goal:
+            QMessageBox.critical(self, "Error", f"Failed to create Security Goal {sg_id}")
             return
 
+        # 🔢 Insert new row
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
         self.table.setRowHeight(row_idx, 40)
-        self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget())
 
-        id_item = QTableWidgetItem(created.sg_id)
+        # 🔗 Track UUID
+        if not hasattr(self, 'row_uuid_map'):
+            self.row_uuid_map = {}
+        self.row_uuid_map[row_idx] = goal.uuid
+
+        # 🧱 Populate row
+        id_item = QTableWidgetItem(sg_id)
         id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
         self.table.setItem(row_idx, 1, id_item)
+        self.table.setItem(row_idx, 2, QTableWidgetItem(name))
+        self.table.setItem(row_idx, 5, QTableWidgetItem(""))  # Description
+        self.table.setItem(row_idx, 6, QTableWidgetItem(""))  # Comments
 
-        name_item = QTableWidgetItem(created.name or sg_name)
-        self.table.setItem(row_idx, 2, name_item)
-
-        # ---- CRUCIAL: Set previous_text BEFORE find_duplicates ----
-        self.previous_text = name_item.text()
-
-        # ---- Now call find_duplicates (will pass, since name is set and non-empty) ----
-        self.find_duplicates(name_item)
-        self.existing_entries.add(name_item.text())
-
-        responsible_widget = MOS.TSMultiSelectComboBox(self.security_goals_responsible_input.items)
-        responsible_widget.set_text(created.responsible.split(',') if created.responsible else [])
-        self.table.setCellWidget(row_idx, 3, responsible_widget)
-
+        # 🧩 Dropdowns: Responsible and TOE Configuration
+        resp_widget = MOS.TSMultiSelectComboBox(self.security_goals_responsible_input.items)
         toe_widget = MOS.TSMultiSelectComboBox(self.formatted_toe_configuration)
-        toe_widget.set_text(created.toe_configuration_id.split(',') if created.toe_configuration_id else [])
+
+        self.table.setCellWidget(row_idx, 3, resp_widget)
         self.table.setCellWidget(row_idx, 4, toe_widget)
 
-        self.table.setItem(row_idx, 5, QTableWidgetItem(created.description or ''))
-        self.table.setItem(row_idx, 6, QTableWidgetItem(created.comments or ''))
-
-        self.row_uuid_map[row_idx] = created.uuid
-
+        # ✅ Set default row selection and update UI state
+        self.table.setCurrentCell(row_idx, 2)
         self.update_button_states()
         interfaces.unsaved_changes = True
-        self.table.itemChanged.connect(self.find_duplicates)
-        self.table.setCurrentCell(row_idx, 2)  # Column 2 = Name
 
+
+     
+
+        self.table.itemChanged.connect(self.find_duplicates)
 
     def delete_entry(self):
         selected_row = self.table.currentRow()
@@ -426,10 +423,41 @@ class SecurityGoals_Module(QWidget):
     def submit_changes(self):
         self.table.setFocus()
         print("-----------step1--------------")
+
+        # Optional: Reload cache if needed
+        SGM.load_all_security_goals()  
+
+        # ✅ Sync all visible rows into cache
+        for row in range(self.table.rowCount()):
+            sg_id = self.table.item(row, 1).text() if self.table.item(row, 1) else ''
+            name = self.table.item(row, 2).text() if self.table.item(row, 2) else ''
+            responsible = self.table.cellWidget(row, 3).selected_items() if self.table.cellWidget(row, 3) else []
+            toe_config = self.table.cellWidget(row, 4).selected_items() if self.table.cellWidget(row, 4) else []
+            description = self.table.item(row, 5).text() if self.table.item(row, 5) else ''
+            comments = self.table.item(row, 6).text() if self.table.item(row, 6) else ''
+
+            updates = {
+                'sg_id': sg_id,
+                'name': name,
+                'responsible': ', '.join(responsible),
+                'toe_configuration_id': ', '.join(t.split('::')[0] for t in toe_config),
+                'description': description,
+                'comments': comments,
+                'updated_by': 'system',
+            }
+
+            # Find UUID and update cache
+            uuid = self.row_uuid_map.get(row)
+            if uuid:
+                SGM.update_security_goal(uuid, updates)
+
+        # ✅ Persist changes to DB
         SGM.persist_security_goal_changes()
         print("-----------step2--------------")
+
         self.update_button_states()
         interfaces.unsaved_changes = False
+
 
     def update_button_states(self):
         selected_rows = self.table.selectionModel().selectedRows()
