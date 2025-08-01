@@ -107,8 +107,8 @@ from components.loading_dialog import RoundLoader
 from models.unique_name_action import refrash_existing_entries, find_duplicates, store_selected_entry
 from controllers.schema_manager import get_instances
 from controllers.tablemodel import TOEConfiguration, SecurityClaims
-import Implementation.Security_Measurement.Security_Goals.controllers.security_goals_manager as SGM
-from Implementation.Security_Measurement.Security_Goals.controllers.security_goals_manager import SECURITY_GOALS_CACHE
+import Security_Measurement.Security_Goals.controllers.security_goals_manager as SGM
+from Security_Measurement.Security_Goals.controllers.security_goals_manager import SECURITY_GOALS_CACHE
 import components.table.multioption_selector as MOS
 
 

@@ -175,6 +175,8 @@ class SecurityGoals_Module(QWidget):
         self.table.itemChanged.connect(self.find_duplicates)
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.itemChanged.connect(self.set_unsaved_changes)
+        self.load_data()
+        self.select_first_row()
 
 
     def on_row_selection_changed(self, selected, deselected):
@@ -244,7 +246,7 @@ class SecurityGoals_Module(QWidget):
 
         # ✅ Update the dropdown in the property panel
         if hasattr(self, 'security_goals_toe_configuration_input'):
-            self.security_goals_toe_configuration_input.clear_items()
+            self.security_goals_toe_configuration_input.clear()
             self.security_goals_toe_configuration_input.additem(self.formatted_toe_configuration)
             self.security_goals_toe_configuration_input.set_text('')
 

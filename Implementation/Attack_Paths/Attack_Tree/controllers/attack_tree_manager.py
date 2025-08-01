@@ -25,6 +25,7 @@ def load_all_AT():
             'changed': False,
             'deleted': False
         }
+        print("------------------------------------",tree.id)
 
     return [entry['record'] for entry in AT_CACHE.values()]
 

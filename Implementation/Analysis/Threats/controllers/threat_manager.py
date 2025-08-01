@@ -114,6 +114,7 @@ def persist_threat_changes():
         AS.update_threatscenario_from_threat()
         AS.remove_threats_from_mitigation()
         AS.sync_attack_tree_with_threats()
+        print ("=============threat->attack path=============")
         AS.update_risktreatement_data()
         print("----------------threat->risktreatment-----------------")
         AS.remove_nonexistent_threat_scenarios_from_Risk_data()

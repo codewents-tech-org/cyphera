@@ -3,6 +3,7 @@ from PyQt5.QtCore import pyqtSignal
 import logging
 
 # UI & Config
+import components.table.table_row_indicator as TRI
 import components.action_panel as action_panel
 import components.propertypanel.property_panel_layout as property_panel_layout
 import components.table.table_panel as table_panel
@@ -132,6 +133,8 @@ class MisuseCases(QWidget):
         records = load_all_misusecases()
         for row_index, misusecase in enumerate(records):
             self.table.insertRow(row_index)
+            is_selected = (row_index == self.table.currentRow())
+            self.table.setCellWidget(row_index, 0, TRI.SidebarWidget(row_idx=row_index, selected=is_selected))
             self.table.setItem(row_index, 1, QTableWidgetItem(misusecase.misuse_cases_id))
             self.table.setItem(row_index, 2, QTableWidgetItem(misusecase.misuse_cases_name))
             self.table.setItem(row_index, 3, QTableWidgetItem(misusecase.misuse_cases_comments or ""))
@@ -256,18 +259,33 @@ class MisuseCases(QWidget):
     def store_selected_entry(self, item): store_selected_entry(self, item)
 
     def on_row_selection_changed(self, selected, deselected):
+        current_row = self.table.currentRow()
+
+        # ✅ Update property panel
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
+        # ✅ Emit selection signal with row data
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
+        if current_row >= 0:
             data = {
-                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                "Comments": self.table.item(row, 3).text() if self.table.item(row, 3) else ""
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Comments": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else ""
             }
             payload = {"sender": "Table", "event": "row_selected", "data": data}
             self.row_selected.emit(payload)
         interfaces.unsaved_changes = temp
+
+        # ✅ Update dot highlight (e.g., custom sidebar widget indicators)
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Update button states (enable/disable Add, Save, Delete, etc.)
+        self.update_button_states()
 
     def display_row_data_in_panel(self, data):
         row = self.table.currentRow()

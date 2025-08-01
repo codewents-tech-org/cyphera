@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import QMessageBox
 #from DatabaseCreator import execute_db
 import models.helper as helper
-
+from datetime import datetime
 import controllers.DatabaseCreator as DB
 #from Attack_Paths.Attack_Tree.controllers.Attack_RiskControlTree_Update import Attack_RiskControlTree_Update 
 from PyQt5.QtWidgets import QMessageBox
@@ -272,7 +272,7 @@ def sync_threat_scenarios(
                             'reasoning': ts.reasoning or '',
                             'comments': ts.comments or '',
                             'updated_by': 'system',
-                            'is_deleted': "False"
+                            'is_deleted': 'False'
                         }
                     )
                     logger.info(f"✅ Updated TS_ID={ts.ts_id}")
@@ -292,7 +292,7 @@ def sync_threat_scenarios(
                         comments='',
                         created_by='system',
                         updated_by='system',
-                        is_deleted="False"
+                        is_deleted='False'
                     )
                     create_instance(new_ts)
                     logger.info(f"✅ Inserted new TS_ID={new_ts_id}")
@@ -305,10 +305,11 @@ def sync_threat_scenarios(
 
 
 def sync_attack_tree_with_threats():
+    print("[=============]")
     logger.info("Syncing Attack Tree with Threats via schema_manager")
 
     # ✅ Fetch all threats from the database
-    threat_rows = get_instances(Threats, {'is_deleted': False})
+    threat_rows = get_instances(Threats, {'is_deleted': 'False'})
     threat_ids = {t.threat_id for t in threat_rows}
 
     # ✅ Fetch all attack tree home rows
@@ -562,8 +563,8 @@ def update_riskData_from_securityClaims():
     # ✅ Step 2: Fetch all RiskData rows
     risk_rows = get_instances(RiskData, {})
     for risk in risk_rows:
-        if risk.security_claims:
-            original_list = [c.strip() for c in risk.security_claims.split(',') if c.strip()]
+        if risk.security_claims_id:
+            original_list = [c.strip() for c in risk.security_claims_id.split(',') if c.strip()]
             filtered_list = [c for c in original_list if c in valid_claim_ids]
 
             if original_list != filtered_list:
@@ -697,8 +698,8 @@ def remove_securityGoal_from_riskData():
     # ✅ Step 2: Fetch all RiskData records
     risk_rows = get_instances(RiskData, {})
     for risk in risk_rows:
-        if risk.security_goals:
-            original_list = [g.strip() for g in risk.security_goals.split(',') if g.strip()]
+        if risk.security_goal_id:
+            original_list = [g.strip() for g in risk.security_goal_id.split(',') if g.strip()]
             filtered_list = [g for g in original_list if g in valid_goal_ids]
 
             if original_list != filtered_list:
@@ -927,8 +928,8 @@ def remove_claims_from_risk_data():
     # ✅ Step 2: Fetch all RiskData entries
     risk_rows = get_instances(RiskData, {})
     for risk in risk_rows:
-        if risk.security_claims:
-            original_list = [claim.strip() for claim in risk.security_claims.split(',') if claim.strip()]
+        if risk.security_claims_id:
+            original_list = [claim.strip() for claim in risk.security_claims_id.split(',') if claim.strip()]
             filtered_list = [claim for claim in original_list if claim in valid_claim_ids]
 
             if original_list != filtered_list:
@@ -999,80 +1000,103 @@ def update_risktreatement_data():
     logger.info("Updating Risk Treatment via ORM")
 
     try:
+        # ✅ Fetch all input data
         damage_rows = get_instances(DamageScenarios, {})
         threat_rows = get_instances(ThreatScenarios, {})
-        threat_map = {t.ts_id: t for t in threat_rows}
-
-        # Prepare lookups
-        ds_map = {ds.ds_id: ds.name for ds in damage_rows}
-        impact_map = {ds.ds_id: ds.impact for ds in damage_rows}
-        threat_scenarios_by_ds = {}
-        for ts in threat_rows:
-            threat_scenarios_by_ds.setdefault(ts.ds_id, []).append(ts)
-
         goal_map = {g.sg_id: g.name for g in get_instances(SecurityGoals, {})}
         claim_map = {c.sc_id: c.name for c in get_instances(SecurityClaims, {})}
         threat_afr_map = {
             t.threat_id: (t.initia_afr, t.resid_afr) for t in get_instances(Threats, {})
         }
         threat_name_map = {t.threat_id: t.name for t in get_instances(Threats, {})}
-        toe_config_map = {
-            ts.threat_id: ts.toe_configuration_id for ts in threat_rows
-        }
-
+        toe_config_map = {ts.threat_id: ts.toe_configuration_id for ts in threat_rows}
         existing_riskdata = get_instances(RiskData, {})
-        existing_map = {
-            rd.rd_id: rd for rd in existing_riskdata
-        }
 
+        # ✅ Build lookup for existing RiskData
+        existing_map = {rd.rd_id: rd for rd in existing_riskdata}
         preserve_fields = {
             rd.rd_id: (
                 rd.risk_treatment, rd.security_claims_id, rd.security_goal_id, rd.mitigated_by
             ) for rd in existing_riskdata
         }
 
-        # risk_id = ts_id, assumed
+        # ✅ Normalize compound ds_id (e.g., "DS-1::Some Name") → "DS-1"
+        def extract_ds_id(ds_string):
+            return ds_string.split("::")[0].strip() if ds_string else ""
+
+        threat_scenarios_by_ds = {}
+        for ts in threat_rows:
+            clean_ds_id = extract_ds_id(ts.ds_id)
+            threat_scenarios_by_ds.setdefault(clean_ds_id, []).append(ts)
+
+        # ✅ Start syncing loop
         for ds in damage_rows:
+            print(f"\n📌 Processing DamageScenario: {ds.ds_id} - {ds.name}")
             related_ts = threat_scenarios_by_ds.get(ds.ds_id, [])
+            print(f"🔗 Found {len(related_ts)} related ThreatScenarios")
+
             for ts in related_ts:
                 rd_id = ts.ts_id
                 tid = ts.threat_id
+                print(f"  🔍 ThreatScenario: {ts.ts_id} (threat_id: {tid}) → rd_id: {rd_id}")
 
                 # Compose fields
-                damage = f"{ds.ds_id} - {ds.name}"
                 impact = ds.impact
                 afr_init, afr_resid = threat_afr_map.get(tid, ("", ""))
                 afr_init_val = str(helper.risk_map.get((impact, afr_init))) if afr_init else ""
                 afr_resid_val = str(helper.risk_map.get((impact, afr_resid))) if afr_resid else ""
                 toe_id = toe_config_map.get(tid, "")
-
                 prev_rt, prev_sc, prev_sg, prev_mb = preserve_fields.get(rd_id, ('', '', '', ''))
 
-                payload = {
-                    'rd_id': rd_id,
-                    'ds_id': ds.ds_id,
-                    'damage': damage,
-                    'impact': impact,
-                    'threat_id': tid,
-                    'init_afr_level': afr_init,
-                    'init_afr_value': afr_init_val,
-                    'resid_afr_level': afr_resid,
-                    'resid_afr_value': afr_resid_val,
-                    'toe_configuration_id': toe_id,
-                    'risk_treatment': prev_rt,
-                    'security_claims_id': prev_sc,
-                    'security_goal_id': prev_sg,
-                    'mitigated_by': prev_mb
-                }
+                print(f"    📊 Impact: {impact}, Init AFR: {afr_init} → {afr_init_val}, Resid AFR: {afr_resid} → {afr_resid_val}")
+                print(f"    🧠 Preserved: rt={prev_rt}, sc={prev_sc}, sg={prev_sg}, mb={prev_mb}")
+                print(f"    ✅ Checking if rd_id exists in DB...")
 
                 if rd_id in existing_map:
-                    update_instance(RiskData, {'rd_id': rd_id}, payload)
+                    print(f"    ✏️ Updating existing RiskData (rd_id={rd_id})")
+                    update_instance(RiskData, {'rd_id': rd_id}, {
+                        'ds_id': ds.ds_id,
+                        'impact': impact,
+                        'threat_id': tid,
+                        'init_afr_level': afr_init,
+                        'init_afr_value': afr_init_val,
+                        'resid_afr_level': afr_resid,
+                        'resid_afr_value': afr_resid_val,
+                        'toe_configuration_id': toe_id,
+                        'risk_treatment': prev_rt,
+                        'security_claims_id': prev_sc,
+                        'security_goal_id': prev_sg,
+                        'mitigated_by': prev_mb,
+                        'created_by': 'system',           # or use the actual logged-in user
+                        'updated_by': 'system',
+                        'created_on': datetime.utcnow(),
+                        'updated_on': datetime.utcnow(),
+                    })
                     logger.info(f"🔄 Updated RiskData: {rd_id}")
                 else:
-                    create_instance(RiskData(**payload))
+                    print(f"    🆕 Creating new RiskData (rd_id={rd_id})")
+                    create_instance(RiskData(
+                        rd_id=rd_id,
+                        ds_id=ds.ds_id,
+                        impact=impact,
+                        threat_id=tid,
+                        init_afr_level=afr_init,
+                        init_afr_value=afr_init_val,
+                        resid_afr_level=afr_resid,
+                        resid_afr_value=afr_resid_val,
+                        toe_configuration_id=toe_id,
+                        risk_treatment=prev_rt,
+                        security_claims_id=prev_sc,
+                        security_goal_id=prev_sg,
+                        mitigated_by=prev_mb,
+                        created_by='system',           # or use the actual logged-in user
+                        updated_by='system',
+                        created_on=datetime.utcnow(), 
+                        updated_on= datetime.utcnow(),        
+                    ))
                     logger.info(f"➕ Inserted new RiskData: {rd_id}")
 
-        # Cleanup orphaned RiskData rows
+        # ✅ Cleanup RiskData entries whose ts_id is no longer valid
         valid_ts_ids = {ts.ts_id for ts in threat_rows}
         for rd in existing_riskdata:
             if rd.rd_id not in valid_ts_ids:
