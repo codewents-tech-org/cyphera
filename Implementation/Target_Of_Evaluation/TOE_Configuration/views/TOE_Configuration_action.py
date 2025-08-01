@@ -47,43 +47,58 @@ class TOEConfigurationModule(QWidget):
     def initUI(self):
         self.row_selected.connect(self.display_row_data_in_panel)
 
+        self.HEIGHT_MAP = {}
+        self.STYLE_MAP = {}
+
         self.property_panel_manager = property_panel_layout.PropertyPanelManager(self)
         self.property_panel_manager.create_property_panel()
 
         self.toggle_button = self.property_panel_manager.toggle_button
         self.property_panel = self.property_panel_manager.property_panel
-        self.property_layout = self.property_panel_manager.property_layout
+        self.property_layout = self.property_panel_manager.property_layout      # ✅ emit it
 
-        self.toe_property_controls = []
+        self.MisuseCases_property_controls = []
 
         self.create_property_panel_signal.connect(self.build_property_panel)
         self.create_property_panel_signal.emit()
 
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(0,0,0,0)
         main_layout.setSpacing(0)
         self.setLayout(main_layout)
 
         create_toolbar(self)
         main_layout.addWidget(self.toolbar)
         action_panel.create_action_panel(self)
-        table_panel.TablePanelWrapper.create_table_panel(self)
 
-        self.action_panel_layout.addLayout(self.table_layout)
+        # ----------- Fix: TablePanelWrapper as object -----------
+        self.table_wrapper = table_panel.TablePanelWrapper(use_row_indicator=True, use_tree_indicator=False, parent=self)
+        self.table_wrapper.create_table_panel()
+        self.table_wrapper.set_headers("toe_configuration")  # Replace with your table key if needed
+
+        self.table = self.table_wrapper.table
+        self.table_layout = self.table_wrapper.table_layout
+        # --------------------------------------------------------
+
+        # Add the table to the action panel
+        self.action_panel_layout.addWidget(self.table)
         self.action_panel_layout.addWidget(self.property_panel_manager.switch_property_panel)
         self.action_panel_layout.addWidget(self.property_panel_manager.property_panel)
         main_layout.addWidget(self.action_panel)
 
+        # Enable/disable buttons
         self.add_button.setEnabled(True)
         self.delete_button.setEnabled(False)
         self.submit_button.setEnabled(False)
         self.save_button.setEnabled(False)
 
+        # Connect buttons to functions
         self.add_button.clicked.connect(self.add_new_entry)
         self.delete_button.clicked.connect(self.delete_entry)
         self.submit_button.clicked.connect(self.submit_changes)
         self.save_button.clicked.connect(self.submit_changes)
 
+        # Connect table signals to state updater
         self.existing_entries = set()
         self.table.itemChanged.connect(self.update_button_states)
         self.table.itemChanged.connect(self.set_unsaved_changes)
@@ -91,10 +106,9 @@ class TOEConfigurationModule(QWidget):
         self.table.itemChanged.connect(self.find_duplicates)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
-
         self.update_button_states()
         self.previous_text = None
-        self.load_data()
+
 
     def on_row_selection_changed(self, selected, deselected):
         temp = interfaces.unsaved_changes
@@ -133,41 +147,42 @@ class TOEConfigurationModule(QWidget):
         self.loader.show()
         QApplication.processEvents()
 
-        self.table.setColumnCount(5)
-        headers = ["", "ID", "Name", "Description", "Comments"]
-        for idx, title in enumerate(headers):
-            self.table.setHorizontalHeaderItem(idx, QTableWidgetItem(title))
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except TypeError:
+            pass
 
         self.table.setRowCount(0)
         self.row_uuid_map = {}
 
         records = load_all_toe_configurations()
-        for record in records:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            self.table.setItem(row, 1, QTableWidgetItem(record.toe_configuration_id))
-            self.table.setItem(row, 2, QTableWidgetItem(record.toe_configuration_name))
-            self.table.setItem(row, 3, QTableWidgetItem(record.toe_configuration_description or ""))
-            self.table.setItem(row, 4, QTableWidgetItem(record.toe_configuration_comments or ""))
+        for row_index, record in enumerate(records):
+            self.table.insertRow(row_index)
+            self.table.setItem(row_index, 1, QTableWidgetItem(record.toe_configuration_id))
+            self.table.setItem(row_index, 2, QTableWidgetItem(record.toe_configuration_name))
+            self.table.setItem(row_index, 3, QTableWidgetItem(record.toe_configuration_description or ""))
+            self.table.setItem(row_index, 4, QTableWidgetItem(record.toe_configuration_comments or ""))
+            self.row_uuid_map[row_index] = record.uuid
 
-            # UUID map for row operations (delete, update)
-            self.row_uuid_map[row] = record.uuid
-
-            # Used by duplicate detection
-            self.existing_entries.add(record.toe_configuration_name)
-
-        self.select_first_row()
         interfaces.unsaved_changes = False
+        self.table.itemChanged.connect(self.find_duplicates)
         self.loader.close()
 
+
     def add_new_entry(self):
+        self.table.setFocus()
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except TypeError:
+            pass
+
         create_toe_and_insert_row(self)
+
         self.update_button_states()
         interfaces.unsaved_changes = True
+
+        self.table.itemChanged.connect(self.find_duplicates)
+
 
     def delete_entry(self):
         selected_rows = sorted(self.table.selectionModel().selectedRows(), key=lambda x: x.row(), reverse=True)
