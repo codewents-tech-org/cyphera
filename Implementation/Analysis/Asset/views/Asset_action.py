@@ -229,6 +229,50 @@ class Asset_Module(QWidget):
         self.data_loaded = True
 
 
+    def add_new_entry(self):
+        self.table.setFocus()
+
+        # 🔌 Disconnect duplicate tracking to avoid false triggers
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except (TypeError, RuntimeError):
+            pass
+
+        # 🆕 Generate new asset
+        asset_id = generate_new_asset_id()
+        asset_name = f"Asset {asset_id.split('-')[-1]}"
+        asset = Assets(
+            asset_id=asset_id,
+            name=asset_name,
+            security_properties="",
+            description="",
+            comments="",
+            created_by="system",
+            updated_by="system"
+        )
+        add_new_asset(asset)  # ✅ Add to DB/cache
+
+        # ➕ Insert row into table
+        row_idx = self.table.rowCount()
+        self.table.insertRow(row_idx)
+        self.table.setItem(row_idx, 1, QTableWidgetItem(asset.asset_id))
+        self.table.setItem(row_idx, 2, QTableWidgetItem(asset.name))
+        self.add_multiselect_to_security_property_cell(row_idx, "")
+        self.table.setItem(row_idx, 4, QTableWidgetItem(""))
+        self.table.setItem(row_idx, 5, QTableWidgetItem(""))
+
+        # 🔁 Track row → ID map and name backup
+        self.row_id_map[row_idx] = asset.asset_id
+        self.asset_names_before[asset.asset_id] = asset.name
+
+        # ✅ Update UI and logic
+        self.update_button_states()
+        interfaces.unsaved_changes = True
+
+        # 🔁 Reconnect
+        self.table.itemChanged.connect(self.find_duplicates)
+
+   
     def on_row_selection_changed(self, selected, deselected):
         """
         Handles row selection:
@@ -320,51 +364,7 @@ class Asset_Module(QWidget):
     def store_selected_entry(self, item): store_selected_entry(self, item)
     
     def refresh_data(self): TFR.asset_refresh_data(self.table)
-
-    def add_new_entry(self):
-        self.table.setFocus()
-
-        # 🔌 Disconnect duplicate tracking to avoid false triggers
-        try:
-            self.table.itemChanged.disconnect(self.find_duplicates)
-        except (TypeError, RuntimeError):
-            pass
-
-        # 🆕 Generate new asset
-        asset_id = generate_new_asset_id()
-        asset_name = f"Asset {asset_id.split('-')[-1]}"
-        asset = Assets(
-            asset_id=asset_id,
-            name=asset_name,
-            security_properties="",
-            description="",
-            comments="",
-            created_by="system",
-            updated_by="system"
-        )
-        add_new_asset(asset)  # ✅ Add to DB/cache
-
-        # ➕ Insert row into table
-        row_idx = self.table.rowCount()
-        self.table.insertRow(row_idx)
-        self.table.setItem(row_idx, 1, QTableWidgetItem(asset.asset_id))
-        self.table.setItem(row_idx, 2, QTableWidgetItem(asset.name))
-        self.add_multiselect_to_security_property_cell(row_idx, "")
-        self.table.setItem(row_idx, 4, QTableWidgetItem(""))
-        self.table.setItem(row_idx, 5, QTableWidgetItem(""))
-
-        # 🔁 Track row → ID map and name backup
-        self.row_id_map[row_idx] = asset.asset_id
-        self.asset_names_before[asset.asset_id] = asset.name
-
-        # ✅ Update UI and logic
-        self.update_button_states()
-        interfaces.unsaved_changes = True
-
-        # 🔁 Reconnect
-        self.table.itemChanged.connect(self.find_duplicates)
-
-        
+     
     def delete_entry(self): 
      
         selected_rows = sorted(self.table.selectionModel().selectedRows(), key=lambda x: x.row(), reverse=True)
@@ -401,7 +401,9 @@ class Asset_Module(QWidget):
                 continue
             asset_id = asset_id_item.text()
             name = asset_name_item.text()
-            security_properties = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
+            combo_widget = self.table.cellWidget(row, 3)
+            security_properties = ", ".join(combo_widget.selected_items()) if combo_widget else ""
+
             description = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
             comments = self.table.item(row, 5).text() if self.table.item(row, 5) else ""
 
@@ -543,7 +545,10 @@ class Asset_Module(QWidget):
     def add_multiselect_to_security_property_cell(self, row_index, current_value=None):
         from models.helper import asset_security_properties_menu
 
+        # ✅ Create a new instance of the combo selector per row
         combo = MultiSelectComboSelector(asset_security_properties_menu, placeholder="Select")
+
+        # ✅ Pre-fill values if given
         if current_value:
             if isinstance(current_value, str):
                 selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
@@ -551,17 +556,24 @@ class Asset_Module(QWidget):
                 selected_items = current_value
             combo.set_selected_items(selected_items)
 
+        # ✅ Handle changes in selection
         def on_selection_change():
             value = ", ".join(combo.selected_items())
-            self.table.setItem(row_index, 3, QTableWidgetItem(value))
+
+            # ✅ DO NOT overwrite the cell widget with QTableWidgetItem — this was the bug
+            # Just update the cache and mark unsaved
             if hasattr(self, 'row_id_map') and row_index in self.row_id_map:
                 asset_id = self.row_id_map[row_index]
                 from Analysis.controllers.asset_manager import update_asset
                 update_asset(asset_id, {"security_properties": value})
                 interfaces.unsaved_changes = True
 
+        # ✅ Connect change listener
         combo.model().dataChanged.connect(on_selection_change)
+
+        # ✅ Place the widget in the table cell
         self.table.setCellWidget(row_index, 3, combo)
+
 
 
                 

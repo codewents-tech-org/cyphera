@@ -33,7 +33,7 @@ class HomeModule(QWidget):
         # self.create_Home_buttons(sidebar_layout)
         # sidebar_layout.addStretch()
         # self.sidebar.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        # main_layout.addWidget(self.sidebar)
+        main_layout.addWidget(self.sidebar)
         
         # Content Layout (Remaining area)
         content_layout = QVBoxLayout()

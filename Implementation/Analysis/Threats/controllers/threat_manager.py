@@ -102,7 +102,7 @@ def persist_threat_changes():
                     'security_properties': obj.security_properties,
                     'reasoning': obj.reasoning,
                     'comments': obj.comments,
-                    'is_deleted': False
+                    'is_deleted': 'False'
                 })
 
             print("uuid===========",uuid)

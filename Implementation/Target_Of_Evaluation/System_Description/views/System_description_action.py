@@ -43,4 +43,5 @@ class SystemDescriptionWidget(QWidget):
 
     def load_data(self, record_id: int = 1):
         html = self.description_model.load(record_id=record_id)
+        print("\n[DEBUG] Loaded HTML content:\n", html)
         self.description_editor.load_content(html)

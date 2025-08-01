@@ -38,7 +38,8 @@ import logging
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QDialog, QTextEdit
 from PyQt5.QtGui     import QTextImageFormat, QTextCursor, QTextBlockFormat
 from PyQt5.QtCore    import Qt
-
+from shutil import copyfile
+import uuid
 import models.Parameters as P
 from ..image_editor_dialog import ResizableImageDialog
 
@@ -72,13 +73,11 @@ class ImageController:
     def insert_picture(self) -> bool:
         """
         Prompts the user to select and optionally resize an image file,
-        then inserts it as its own left‐aligned paragraph block.
-
-        Returns:
-            True if an image was successfully inserted; False otherwise.
+        saves it inside the project's `descriptionimage/` folder,
+        and inserts it into the QTextEdit using a relative path.
         """
         try:
-            # Ensure project path is configured
+            # Step 0: Ensure project path is set
             project_path = P.project_path
             if not project_path:
                 QMessageBox.warning(
@@ -87,63 +86,80 @@ class ImageController:
                     "Project path is not set."
                 )
                 return False
+            print(f"[DEBUG] Project path: {project_path}")
 
-            # Prepare image storage folder
+            # Step 1: Create `descriptionimage/` folder if not exists
             image_folder = os.path.join(project_path, "descriptionimage")
             os.makedirs(image_folder, exist_ok=True)
+            print(f"[DEBUG] Ensured image folder exists: {image_folder}")
 
-            # 1) Prompt for file
+            # Step 2: Prompt file picker
             fname, _ = QFileDialog.getOpenFileName(
                 self.text_edit,
-                "Open Image File",
-                str(project_path),                # <-- ensure this is a str, not a Path
-                "Images (*.png *.jpg *.bmp)"
+                "Select Image File",
+                str(project_path),
+                "Images (*.png *.jpg *.jpeg *.bmp)"
             )
             if not fname:
+                print("[DEBUG] Image selection canceled.")
                 return False
+            print(f"[DEBUG] Selected image: {fname}")
 
-            # 2) Show resize dialog
+            # Step 3: Resize dialog
             dlg = ResizableImageDialog(fname, parent=self.text_edit)
-            # guard against stubs without setWindowState()
             if hasattr(dlg, "setWindowState") and hasattr(dlg, "windowState"):
                 dlg.setWindowState(dlg.windowState() | Qt.WindowMaximized)
             if dlg.exec_() != QDialog.Accepted:
+                print("[DEBUG] Resize dialog canceled.")
                 return False
 
-            image_path, w, h = dlg.get_resized_image()
+            temp_resized_path, width, height = dlg.get_resized_image()
+            print(f"[DEBUG] Resized image saved at: {temp_resized_path} with size {width}x{height}")
 
-            # 3) Insert image block
+            # Step 4: Generate unique filename and move resized image to project folder
+            import uuid
+            ext = os.path.splitext(fname)[1].lower()
+            unique_name = f"img_{uuid.uuid4().hex[:8]}{ext}"
+            final_image_path = os.path.join(image_folder, unique_name)
+            os.replace(temp_resized_path, final_image_path)
+            print(f"[DEBUG] Final image moved to: {final_image_path}")
+
+            # Step 5: Calculate relative path for QTextEdit
+            relative_image_path = os.path.relpath(final_image_path, start=project_path)
+            relative_image_path = relative_image_path.replace("\\", "/")  # always forward slashes
+            print(f"[DEBUG] Relative image path to insert: {relative_image_path}")
+
+            # Step 6: Insert image in QTextEdit
             cursor = self.text_edit.textCursor()
             cursor.beginEditBlock()
-
-            # Move to end and insert a left-aligned paragraph
             cursor.movePosition(QTextCursor.End)
+
             blk_fmt = QTextBlockFormat()
             blk_fmt.setAlignment(Qt.AlignLeft)
             cursor.insertBlock(blk_fmt)
 
-            # Insert image with explicit size
             img_fmt = QTextImageFormat()
-            img_fmt.setName(image_path)
-            img_fmt.setWidth(w)
-            img_fmt.setHeight(h)
+            img_fmt.setName(relative_image_path)
+            img_fmt.setWidth(width)
+            img_fmt.setHeight(height)
             cursor.insertImage(img_fmt)
 
-            # Insert a new paragraph after the image
+            # Add new empty block
             cursor.insertBlock()
             cursor.mergeCharFormat(self.text_edit.currentCharFormat())
             cursor.endEditBlock()
 
-            # 4) Restore cursor & focus
             self.text_edit.setTextCursor(cursor)
             self.text_edit.setFocus()
 
-            # 5) Update toolbar state on parent editor
+            # Step 7: Notify editor (optional update toolbar)
             parent = self.text_edit.parent()
             if hasattr(parent, "update_toolbar_state"):
                 parent.update_toolbar_state()
 
-            logger.info("Inserted image '%s' (%dx%d)", image_path, w, h)
+            logger.info("Inserted image '%s' (%dx%d)", relative_image_path, width, height)
+            print(f"[DEBUG] Image inserted successfully!")
+
             return True
 
         except Exception as e:
@@ -154,3 +170,4 @@ class ImageController:
                 f"Image insert failed:\n{e}"
             )
             return False
+

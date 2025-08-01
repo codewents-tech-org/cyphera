@@ -30,9 +30,9 @@ load(record_id)
 save(html_content, record_id)
   • Returns True on success, False on failure
 """
-
+import logging
 from controllers.schema_manager import get_instances, create_instance, update_instance ,get_first_instance
-
+logger = logging.getLogger("description model logger")
 class DescriptionModel:
     """
     Generic ORM-based description model using schema_manager for read/write.
@@ -78,8 +78,14 @@ class DescriptionModel:
                 True if successful, False otherwise.
             """
             filters = {self.id_column: record_id}
-            instance = get_first_instance(self.model_class, filters)
+            logger.debug(f"[DEBUG] Attempting to save content for {self.model_class.__name__} at record_id={record_id}")
 
+            # Log HTML content being saved (truncated if long)
+            preview = html_content[:500] + "..." if len(html_content) > 500 else html_content
+            logger.debug(f"[DEBUG] HTML content to save:\n{preview}")
+
+            instance = get_first_instance(self.model_class, filters)
+            
             if instance:
                 return update_instance(self.model_class, filters, {
                     self.content_column: html_content,

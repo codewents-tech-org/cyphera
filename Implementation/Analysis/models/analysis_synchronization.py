@@ -114,7 +114,7 @@ def sync_threats_with_assets():
     for threat_id in final_remove_list:
         # insert into `threat_trash` (if that model/table is defined — otherwise, log)
         logger.info(f"Soft-deleting threat {threat_id}")
-        update_instance(Threats, {'threat_id': threat_id}, {'is_deleted': 'True'})
+        update_instance(Threats, {'threat_id': threat_id}, {'is_deleted': 'False'})
 
     # ✅ Insert new threats based on Assets
     for asset_id, sp_list in existing_assets_datas.items():

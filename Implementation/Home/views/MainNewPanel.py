@@ -59,6 +59,8 @@ if os.path.exists(env_path):
     load_dotenv(dotenv_path=env_path)
 else:
     print("[WARN] .env file not found; using default/fallback values.")
+config_file_path = None  # Global project config path
+
 class MainNew_Panel(QWidget):
     def __init__(self):
         super().__init__()
@@ -204,8 +206,7 @@ class MainNew_Panel(QWidget):
             self.create_project_with_config_file(Path(self.file_input.text()))
 
     def create_remote_project(self):
-
-
+        global config_file_path
         print("\n🔄 [TARA] Starting remote project creation...\n")
         project_name = self.project_name_input.text().strip()
         author = self.author_input.text().strip()
@@ -253,52 +254,93 @@ class MainNew_Panel(QWidget):
             "methodology": methodology,
             "dependencies": []
         }
+
+        config_file_path = os.path.join(self.base_path, project_name, f"{project_name}.tara")
         write_remote_tara_config(project_name, tara_config)
+
         print(f"📦 Project '{project_name}' fully initialized in remote server.")
-        self.clear_fields()
+
+        self.file_input.setText(str(config_file_path))
+        self.open_local_project(str(config_file_path))
+
+
+
+    def open_local_project(self, project_path=None):
+        global config_file_path
+        project_path = project_path or str(config_file_path)
+        print(f"🔍 [DEBUG][LOCAL] Opening: {project_path}")
+
+        try:
+            recent_db = Recent_file_DB_creation()
+            recent_db.save_project(project_path=project_path)
+        except Exception as e:
+            print(f"⚠️ [DEBUG][LOCAL] Could not update recent files DB: {e}")
+
+        interfaces.tool_reset_enable = True
+        for Tree, (tree_tab, instances) in interfaces.tree_tab_panel.items():
+            for i in reversed(range(tree_tab.count())):
+                instances.pop(f'{tree_tab.tabText(i)}', None)
+                tree_tab.removeTab(i)
+        interfaces.tool_reset_enable = False
+
+        database_path = self.get_database_file_path(config_file_path=project_path)
+        P.database_file_path = database_path
+        P.SQLALCHEMY_DATABASE_URL = f"sqlite:///{database_path}"
+        print(f"🔗 [DEBUG][LOCAL] SQLite URL: {P.SQLALCHEMY_DATABASE_URL}")
+
+        get_engine_and_session()
+
+        for module, module_data in interfaces.sub_modules.items():
+            module_data["current_submodule"] = module_data["default_submodule"]
+            module_data["module"].on_click()
+            module_data["action"]()
+
+        if hasattr(interfaces, "report_panel") and interfaces.report_panel:
+            interfaces.report_panel.setHtml("")
+
+        helper.Panel_selector = 'ModuleTab'
+        helper.modulePanel_Selector = 'TargetOfEvaluationTab'
+        helper.submodulePanel_Selector = 'SystemDescriptionTab'
+        interfaces.project_path = project_path
+
+        interfaces.sub_modules[interfaces.default_modules["module"]["name"]]["current_submodule"] = interfaces.default_modules["submodule"]["name"]
+        interfaces.default_modules["module"]["module_button"].on_click()
+        interfaces.default_modules["module"]["module_action"]()
+        interfaces.default_modules["submodule"]["submodule_button"].on_click()
+        interfaces.default_modules["submodule"]["submodule_action"]()
+
+        print("✅ [DEBUG][LOCAL] Local project fully opened and UI state reset.")
+
+
 
     def create_project_with_config_file(self, selected_base_path, config_extension=".tara", config_data=None):
-        """
-        Creates local project structure using SQLite and initializes database using tablemodels.py.
-        
-        Folder structure:
-        └── <selected_base_path>/<project_name>/
-            ├── config/
-            │   └── <project_name>.db
-            ├── <project_name>.tara
-            ├── README.md
-            └── requirements.txt
-        """
-
         from controllers.database import get_engine_and_session, initialize_database
         from models import Parameters as P
         import json
         from pathlib import Path
 
-        # 📁 Compose final project path
         project_name = self.project_name_input.text().strip()
         final_path = Path(selected_base_path) / project_name
 
-        # 🛠 Create folder structure
+        # Folder structure
         final_path.mkdir(parents=True, exist_ok=True)
         (final_path / 'config').mkdir(exist_ok=True)
         (final_path / 'README.md').touch()
         (final_path / 'requirements.txt').touch()
 
-        # 🗂️ Define SQLite DB file path and URL
+        # Database path
         db_file_path = final_path / 'config' / f"{project_name}.db"
         P.database_file_path = db_file_path
         P.SQLALCHEMY_DATABASE_URL = f"sqlite:///{str(db_file_path)}"
 
         if db_file_path.exists():
-            os.chmod(db_file_path, 0o666)  # Read & write permission for all
-            os.chmod(db_file_path.parent, 0o775)  # Ensure /config folder is writable
-            
-        # ⚙️ Initialize SQLAlchemy engine and models
+            os.chmod(db_file_path, 0o666)
+            os.chmod(db_file_path.parent, 0o775)
+
         get_engine_and_session()
         initialize_database()
 
-        # 📝 Build project metadata config
+        # Config data
         if config_data is None:
             config_data = {
                 "project_name": project_name,
@@ -310,12 +352,11 @@ class MainNew_Panel(QWidget):
                 "dependencies": []
             }
 
-        # 💾 Write .tara config file
         config_file_path = final_path / f"{project_name}{config_extension}"
         with config_file_path.open('w') as config_file:
             json.dump(config_data, config_file, indent=4)
 
-        # 🔁 Store metadata
+        # Store project metadata
         P.project_path = final_path
         P.Project_name = config_data['project_name']
         P.Client_name = config_data['client']
@@ -324,29 +365,11 @@ class MainNew_Panel(QWidget):
         interfaces.project_path = config_file_path
 
         print(f"✅ Project '{project_name}' created with configuration file at '{config_file_path}'.")
-        
-        # 🧹 Clear inputs
-        self.clear_fields()
 
-    def clear_fields(self):
-        self.file_input.clear()
-        self.project_name_input.clear()
-        self.author_input.clear()
-        self.client_input.clear()
-        self.supplier_input.clear()
+        # Open the project immediately
+        self.file_input.setText(str(config_file_path))
+        self.open_local_project(str(config_file_path))
 
-        if interfaces.main_sub_modules:
-            interfaces.main_sub_modules[1][1].on_click()
-            interfaces.main_sub_modules[1][0]()
-
-        if interfaces.default_sub_module:
-            interfaces.default_sub_module[0].on_click()
-            interfaces.default_sub_module[1]()
-
-        helper.Panel_selector = 'ModuleTab'
-        helper.modulePanel_Selector = 'HomeTab'
-        helper.submodulePanel_Selector = 'HomeTab'
-        interfaces.home_sub_modules[0].setHidden(False)
 
     def show_project_exists_warning(self):
         warning_msg = QMessageBox()
@@ -363,3 +386,30 @@ class MainNew_Panel(QWidget):
         else:
             self.local_button.setStyleSheet(home_style.toggle_button_inactive_style)
             self.cloud_button.setStyleSheet(home_style.toggle_button_active_style)
+
+    def switch_to_default_module(self):
+        """
+        Handles exact default loading like MainOpenPanel after module setup.
+        """
+        try:
+            interfaces.sub_modules[interfaces.default_modules["module"]["name"]]["current_submodule"] = interfaces.default_modules["submodule"]["name"]
+            interfaces.default_modules["module"]["module_button"].on_click()
+            interfaces.default_modules["module"]["module_action"]()
+            interfaces.default_modules["submodule"]["submodule_button"].on_click()
+            interfaces.default_modules["submodule"]["submodule_action"]()
+        except Exception as e:
+            print("[ERROR] Sidebar render failure (default switch):", e)
+
+    def get_database_file_path(self, config_file_path):
+        """
+        Given a .tara config file path, locate the associated SQLite DB path.
+        """
+        try:
+            with open(config_file_path, 'r') as f:
+                config_data = json.load(f)
+                project_name = config_data.get("project_name", "")
+                project_root = os.path.dirname(config_file_path)
+                return os.path.join(project_root, "config", f"{project_name}.db")
+        except Exception as e:
+            print(f"[ERROR] Failed to read config file for DB path: {e}")
+            return ""
