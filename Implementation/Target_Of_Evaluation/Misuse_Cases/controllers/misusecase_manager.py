@@ -3,6 +3,7 @@ from controllers.schema_manager import (
     get_instances, create_instance, bulk_update_instances, get_max_numeric_suffix,get_first_instance
 )
 from controllers.tablemodel import Misusecases
+import Analysis.models.analysis_synchronization as AS
 from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox
 import logging
 

@@ -91,6 +91,7 @@ from components.propertypanel.property_input_components import PropertyInputFact
 from styles.property_panel_style import property_save_button_style
 from PyQt5.QtCore import pyqtSignal
 import controllers.TableValueHighlight as TVH
+import components.table.table_row_indicator as TRI
 import Analysis.controllers.analysis_PropertyValueDisplay as PVD
 import components.action_panel as action_panel
 import components.table.table_panel as table_panel
@@ -179,56 +180,39 @@ class Threat_Module(QWidget):
         self.update_button_states()
         self.previous_text = None
 
-
-
-    def on_row_selection_changed(self, selected, deselected): 
+    def on_row_selection_changed(self, selected, deselected):
         """
-        Handles row selection events from the threat table.
-
-        Extracts relevant values from the selected row, constructs a payload,
-        and emits it via the `row_selected` signal for further processing
-        (usually to update the property panel).
-
-        Parameters:
-        -----------
-        selected : QItemSelection
-            The newly selected row(s) in the table.
-        deselected : QItemSelection
-            The previously selected row(s).
-
-        Emits:
-        -------
-        row_selected : pyqtSignal
-            Emits a dictionary containing the selected row's data:
-            {
-                "sender": "Table",
-                "event": "row_selected",
-                "data": {
-                    "ID": "...",
-                    "Name": "...",
-                    ...
-                }
-            }
-
-        See Also:
-        ---------
-        - display_row_data_in_panel (slot connected to this signal)
+        Handles row selection:
+        - Emits structured row data
+        - Highlights only the selected row's sidebar indicator (dot)
+        - Updates property panel and button states
         """
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
 
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
+        current_row = self.table.currentRow()
+        total_rows = self.table.rowCount()
+
+        # ✅ Highlight selected row's dot
+        for row in range(total_rows):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Display data in property panel and emit signal
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
             data = {
-                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                "Damage Scenarios": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                "TOE Configuration": self.table.item(row, 4).text() if self.table.item(row, 4) else "",
-                "Misuse Cases": self.table.item(row, 5).text() if self.table.item(row, 5) else "",
-                "Asset": self.table.item(row, 8).text() if self.table.item(row, 8) else "",
-                "Security Property": self.table.item(row, 9).text() if self.table.item(row, 9) else "",
-                "Reasoning": self.table.item(row, 10).text() if self.table.item(row, 10) else "",
-                "Comments": self.table.item(row, 11).text() if self.table.item(row, 11) else ""
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Damage Scenarios": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
+                "TOE Configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
+                "Misuse Cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
+                "Asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
+                "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
+                "Reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
+                "Comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
             }
 
             payload = {
@@ -238,6 +222,7 @@ class Threat_Module(QWidget):
             }
             self.row_selected.emit(payload)
 
+        self.update_button_states()
         interfaces.unsaved_changes = temp
 
     def select_first_row(self): 
@@ -316,6 +301,8 @@ class Threat_Module(QWidget):
 
         for row_idx, threat in enumerate(threats):
             self.table.insertRow(row_idx)
+            is_selected = (row_idx == self.table.currentRow())
+            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
             
 
             for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
