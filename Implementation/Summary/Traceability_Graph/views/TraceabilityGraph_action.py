@@ -559,6 +559,8 @@ class TraceabilityGraph_Module(QWidget):
                 empty_control_box = self.create_NO_Data_Custom_Box("", "")
                 self.grid_layout.addWidget(empty_control_box, 1, 8)    
 
+        print("========================================traceability link data==========================================")
+        print(self.traceability_link)
         for details  in self.traceability_link.values():
             if details['damage'] != '' and details['threat'] != '':
                 if details['damage'] in self.damage_seen.keys() and details['threat'] in self.threat_seen.keys():

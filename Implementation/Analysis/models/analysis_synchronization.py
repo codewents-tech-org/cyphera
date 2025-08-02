@@ -15,7 +15,7 @@ from Attack_Paths.controllers.Update_Connected_Modules import update_threat_tabl
 import re
 import logging
 from controllers.schema_manager import (
-    get_instances, create_instance, update_instance, delete_instance, get_max_numeric_suffix
+    get_instances, create_instance, update_instance, delete_instance, get_max_numeric_suffix, get_first_instance
 )
 #from controllers.tablemodel import TOEConfigurationInManagementSummary,AssumptionsInManagementSummary
 #from controllers.tablemodel import SecurityControls as SCModel, MS_SecurityControl
@@ -28,6 +28,7 @@ from controllers.database_tables.security_measurment_tables import SecurityClaim
 from controllers.database_tables.catalog_tables import ThreatCatalog
 from controllers.database_tables.attack_paths_tables import RiskControlTreeHome,RiskControlTree,AttackTreeHome,AttackTree
 from controllers.database_tables.risk_assessment_tables import RiskData
+from Attack_Paths.Attack_Tree.controllers.backend_at_table_update import update_attack_tree_table
 
 logger = logging.getLogger(__name__)
 
@@ -67,66 +68,49 @@ def sync_threats_with_assets():
     logger.info("Updated Threats from Assets")
 
     # ✅ Fetch assets
-    asset_rows = get_instances(Assets, {})
-    existing_assets_ids = [a.asset_id for a in asset_rows]
-    existing_assets_datas = {}
-    asset_name_map = {}
-
+    asset_rows = get_instances(Assets, {'is_deleted': 'False'})
     for asset in asset_rows:
-        sp_list = [s.strip() for s in (asset.security_properties or "").split(',') if s.strip()]
+        sp_list = [item.strip() for item in asset.security_properties.split(',') if item.strip()]
+        print(sp_list)
+
         if sp_list:
-            existing_assets_datas[asset.asset_id] = sp_list
-        asset_name_map[asset.asset_id] = asset.name
+            for sp in sp_list:
+                node = get_first_instance(Threats, {'asset_id': asset.asset_id, 'security_properties': sp})
+                print(sp_list, " : ", sp, " : ", node)
+                if node:
+                    expected_name = generate_name(asset.asset_id, sp)
+                    update_instance(Threats, {'threat_id': node.threat_id}, {'name': expected_name, 'is_deleted': 'False'})
+                else:
+                    new_threat_id = threat_generate_id()
+                    new_name = generate_name(asset.asset_id, sp)
 
-    # ✅ Fetch threats
-    threat_rows = get_instances(Threats, {})
-    existing_threat_maps = {
-        t.threat_id: t for t in threat_rows
-    }
-
-    # ✅ Identify outdated or orphaned threats
-    remove_threat_list = []
-    for threat_id, threat in existing_threat_maps.items():
-        asset_id = threat.asset_id
-        sp_in_threat = threat.security_properties
-        threat_name = threat.name
-
-        match = re.match(r"^\[(\d+(\.\d+)?)\]", threat_name or "")
-        if match:
-            continue  # Skip those with [X] pattern
-
-        if asset_id not in existing_assets_ids or sp_in_threat not in existing_assets_datas.get(asset_id, []):
-            remove_threat_list.append(threat_id)
+                    new_threat = Threats(
+                        threat_id=new_threat_id,
+                        name=new_name,
+                        ds_id="",
+                        toe_configuration_id="",
+                        misuse_cases_id="",
+                        initia_afr="",
+                        resid_afr="",
+                        asset_id=asset.asset_id,
+                        security_properties=sp,
+                        reasoning="",
+                        comments="",
+                        created_by="system",
+                        updated_by="system",
+                        is_deleted='False'
+                    )
+                    create_instance(new_threat)
         else:
-            expected_name = generate_name(asset_id, sp_in_threat)
-            if threat.name != expected_name:
-                update_instance(Threats, {'threat_id': threat_id}, {'name': expected_name},{'is_deleted': 'Flase'})
-
-    # ✅ Filter out threats present in ThreatCatalog
-    catalog_entries = get_instances(ThreatCatalog, {})
-    catalog_threat_names = {entry.threat_id for entry in catalog_entries if entry.threat_id}
-    final_remove_list = [
-        tid for tid in remove_threat_list
-        if existing_threat_maps[tid].name not in catalog_threat_names
-    ]
-
-    # ✅ Move to trash + delete from Threats
-    for threat_id in final_remove_list:
-        # insert into `threat_trash` (if that model/table is defined — otherwise, log)
-        logger.info(f"Soft-deleting threat {threat_id}")
-        update_instance(Threats, {'threat_id': threat_id}, {'is_deleted': 'False'})
-
-    # ✅ Insert new threats based on Assets
-    for asset_id, sp_list in existing_assets_datas.items():
-        for sp in sp_list:
-            exists = any(
-                t.asset_id == asset_id and t.security_properties == sp
-                for t in existing_threat_maps.values()
-            )
-            if not exists:
+            node = get_first_instance(Threats, {'asset_id': asset.asset_id, 'security_properties': ''})
+            print(sp_list, " : ", node)
+            if node:
+                expected_name = generate_name(asset.asset_id, '')
+                update_instance(Threats, {'threat_id': node.threat_id}, {'name': expected_name, 'is_deleted': 'False'})
+            else:
                 new_threat_id = threat_generate_id()
-                new_name = generate_name(asset_id, sp)
-
+                new_name = generate_name(asset.asset_id, '')
+                print(new_threat_id, " - ", new_name)
                 new_threat = Threats(
                     threat_id=new_threat_id,
                     name=new_name,
@@ -135,8 +119,8 @@ def sync_threats_with_assets():
                     misuse_cases_id="",
                     initia_afr="",
                     resid_afr="",
-                    asset_id=asset_id,
-                    security_properties=sp,
+                    asset_id=asset.asset_id,
+                    security_properties='',
                     reasoning="",
                     comments="",
                     created_by="system",
@@ -144,28 +128,33 @@ def sync_threats_with_assets():
                     is_deleted='False'
                 )
                 create_instance(new_threat)
-                print(new_threat)
 
-    # ✅ Resync dependent structures
-    # sync_attack_tree_with_threats()
-    update_threatscenario_from_threat()
-
+        threats_rows = get_instances(Threats, {'asset_id': asset.asset_id})
+        for threat in threats_rows:
+            if sp_list != [] and threat.security_properties not in sp_list:
+                update_instance(Threats, {'threat_id': threat.threat_id}, {'is_deleted': 'True'})
+        print(threats_rows)
+    asset_rows = get_instances(Assets, {'is_deleted': 'True'})
+    for asset in asset_rows:
+        threats_rows = get_instances(Threats, {'asset_id': asset.asset_id})
+        for threat in threats_rows:
+            update_instance(Threats, {'threat_id': threat.threat_id}, {'is_deleted': 'True'})
 
 def update_threatscenario_from_threat():
     logger.info("Updated threat scenarios from Assets")
 
     # ✅ Step 1: Fetch damage scenarios
-    damage_scenarios = get_instances(DamageScenarios, {})
+    damage_scenarios = get_instances(DamageScenarios, {'is_deleted': 'False'})
     damage_scenario_map = {ds.ds_id: ds.name for ds in damage_scenarios}
 
     # ✅ Step 2: Fetch threats
-    threats = get_instances(Threats, {})
+    threats = get_instances(Threats, {'is_deleted': 'False'})
     threat_damage_map = {}     # {threat_id: [damage_scenarios]}
     threat_name_map = {}       # {threat_id: name}
     threat_toe_config_map = {} # {threat_id: toe_configuration_id}
 
     for t in threats:
-        ds_ids = [ds.strip() for ds in (t.ds_id or "").split(',') if ds.strip()]
+        ds_ids = [ds.strip() for ds in t.ds_id.split(',') if ds.strip()]
         threat_damage_map[t.threat_id] = ds_ids
         threat_name_map[t.threat_id] = t.name
         threat_toe_config_map[t.threat_id] = t.toe_configuration_id or ""
@@ -177,7 +166,7 @@ def update_threatscenario_from_threat():
 
     for ts in ts_rows:
         ts_id = ts.ts_id
-        threat_id = (ts.threat_id or "").strip()
+        threat_id = (ts.threat_id or "").split("::")[0].strip() if ts.threat_id else ''
         ds_id = (ts.ds_id or "").split("::")[0].strip() if ts.ds_id else ""
         toe_cfg = ts.toe_configuration_id or ""
 
@@ -252,7 +241,7 @@ def sync_threat_scenarios(
     for threat_id, ds_list in threat_damage_map.items():
         threat_name = threat_name_map.get(threat_id, "")
         toe_cfg = threat_toe_config_map.get(threat_id, "")
-        logger.info(f"\n🧠 Processing threat: {threat_id} ({threat_name}) → {len(ds_list)} DS linked")
+        logger.info(f"\n🧠 Processing threat: {threat_id} ({threat_name}) → {ds_list} DS linked")
 
         for ds_id in ds_list:
             ds_id = ds_id.strip()
@@ -285,7 +274,7 @@ def sync_threat_scenarios(
                 try:
                     new_ts = ThreatScenarios(
                         ts_id=new_ts_id,
-                        threat_id=threat_id,
+                        threat_id=f"{threat_id}::{threat_name}",
                         ds_id=ds_id,
                         toe_configuration_id=toe_cfg,
                         reasoning='',
@@ -300,8 +289,6 @@ def sync_threat_scenarios(
                     logger.exception(f"❌ Failed to insert new TS_ID={new_ts_id}: {e}")
 
     logger.info("🎯 ThreatScenarios sync complete.")
-
-
 
 
 def sync_attack_tree_with_threats():
@@ -366,7 +353,7 @@ def threat_generate_id():
 
     if last_threat_number is None:
         # Lazy load the highest existing threat number from DB
-        last_threat_number = get_max_numeric_suffix("threats", "threat_id", prefix="TH")
+        last_threat_number = get_max_numeric_suffix(Threats, "threat_id", prefix="TH")
         if last_threat_number is None:
             last_threat_number = 0
 
@@ -1038,6 +1025,8 @@ def update_risktreatement_data():
             for ts in related_ts:
                 rd_id = ts.ts_id
                 tid = ts.threat_id
+                dsid = ts.ds_id
+                thid = (ts.threat_id).replace('::', ' - ')
                 print(f"  🔍 ThreatScenario: {ts.ts_id} (threat_id: {tid}) → rd_id: {rd_id}")
 
                 # Compose fields
@@ -1055,9 +1044,9 @@ def update_risktreatement_data():
                 if rd_id in existing_map:
                     print(f"    ✏️ Updating existing RiskData (rd_id={rd_id})")
                     update_instance(RiskData, {'rd_id': rd_id}, {
-                        'ds_id': ds.ds_id,
+                        'ds_id': f"{ds.ds_id} - {ds.name}",
                         'impact': impact,
-                        'threat_id': tid,
+                        'threat_id': thid,
                         'init_afr_level': afr_init,
                         'init_afr_value': afr_init_val,
                         'resid_afr_level': afr_resid,
@@ -1077,9 +1066,9 @@ def update_risktreatement_data():
                     print(f"    🆕 Creating new RiskData (rd_id={rd_id})")
                     create_instance(RiskData(
                         rd_id=rd_id,
-                        ds_id=ds.ds_id,
+                        ds_id=f"{ds.ds_id} - {ds.name}",
                         impact=impact,
-                        threat_id=tid,
+                        threat_id=thid,
                         init_afr_level=afr_init,
                         init_afr_value=afr_init_val,
                         resid_afr_level=afr_resid,
@@ -1096,6 +1085,8 @@ def update_risktreatement_data():
                     ))
                     logger.info(f"➕ Inserted new RiskData: {rd_id}")
 
+                update_attack_tree_table(tid.split("::")[0].strip())
+
         # ✅ Cleanup RiskData entries whose ts_id is no longer valid
         valid_ts_ids = {ts.ts_id for ts in threat_rows}
         for rd in existing_riskdata:
@@ -1103,7 +1094,7 @@ def update_risktreatement_data():
                 delete_instance(RiskData, {'rd_id': rd.rd_id})
                 logger.info(f"🗑️ Deleted orphan RiskData: {rd.rd_id}")
 
-        update_risktreatment_table()
+        # update_risktreatment_table()
 
     except Exception as e:
         QMessageBox.critical(None, "Database Error", f"Error updating risk treatment: {e}")

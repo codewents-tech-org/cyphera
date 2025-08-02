@@ -24,12 +24,13 @@ def update_attack_tree_table(tree_id: str=None):
                 mitigates = ', '.join(mitigates_ids) if mitigates_ids else ''
                 print(mitigates)
                 threat_node = get_first_instance(AttackTreeHome, {'id': tree_id, 'is_deleted': False})
-                rd_nodes = get_instances(RiskData, {'threat_id': f"{threat_node.id} - {threat_node.name}"})
+                rd_threat_id = f"{(threat_node.id).strip()} - {(threat_node.name).strip()}"
+                rd_nodes = get_instances(RiskData, {'threat_id': rd_threat_id})
                 for rd_node in rd_nodes:
                     update_instance(RiskData, {'threat_id': rd_node.threat_id}, {'init_afr_level': node.af_level, 
-                                                                                        'init_afr_value': risk_map[(rd_node.impact, node.af_level)] if 'imapact' in node and node.af_level and node.af_level != '' else '', 
+                                                                                        'init_afr_value': risk_map[(rd_node.impact, node.af_level)] if node.af_level and node.af_level != '' else '', 
                                                                                         'resid_afr_level':node.rf_level, 
-                                                                                        'resid_afr_value': risk_map[(rd_node.impact, node.rf_level)] if 'imapact' in node and node.rf_level and node.rf_level != '' else '', 
+                                                                                        'resid_afr_value': risk_map[(rd_node.impact, node.rf_level)] if node.rf_level and node.rf_level != '' else '', 
                                                                                         'mitigated_by':mitigates})
 
         return True

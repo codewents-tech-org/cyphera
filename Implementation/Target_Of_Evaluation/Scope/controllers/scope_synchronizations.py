@@ -62,6 +62,8 @@ def synch_mindmap_changes(scope_id, scope_name):
 
             if scope_instance.asset_id:
                 asset_id = scope_instance.asset_id
+                update_instance(Assets, {'asset_id': asset_id}, {'name': scope_name})
+                AS.sync_threats_with_assets()
                 if scope_instance.threat_id:
                     mindmap_attacktree_generator(scope_id, scope_name)
                 else:
@@ -122,3 +124,17 @@ def sync_linked_modules():
     AS.remove_orphaned_attack_tree_rows()
     AS.update_risktreatement_data()
     AS.remove_nonexistent_threat_scenarios_from_Risk_data()
+
+def update_scope_threats():
+    scope_data = get_instances(ScopesReference, {})
+
+    for scope in scope_data:
+        threat_ids = []
+        if scope.asset_id:
+            threat_rows = get_instances(Threats, {'asset_id':scope.asset_id, 'is_deleted': 'False'})
+            if threat_rows:
+                threat_ids = [threat.threat_id.strip() for threat in threat_rows if threat.threat_id]
+                threat_ids_str = ', '.join(threat_ids)
+                update_instance(ScopesReference, {'uuid': scope.uuid}, {'threat_id':threat_ids_str})
+            else:
+                update_instance(ScopesReference, {'uuid': scope.uuid}, {'threat_id':''})
