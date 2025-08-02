@@ -120,7 +120,7 @@ class Threat_Module(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.row_selected.connect(self.display_row_data_in_panel)
+        self.row_selected.connect(lambda payload: self.display_row_data_in_panel(payload["data"]))
 
         self.HEIGHT_MAP = {}
         self.STYLE_MAP = {}
@@ -190,7 +190,6 @@ class Threat_Module(QWidget):
         - Updates property panel and button states
         """
         temp = interfaces.unsaved_changes
-        # TVH.on_row_selection_changed(self.table)
 
         current_row = self.table.currentRow()
         print("-----------curentrow-------------")
@@ -205,20 +204,25 @@ class Threat_Module(QWidget):
             if isinstance(widget, TRI.SidebarWidget):
                 widget.set_selected(row == current_row)
 
-        # ✅ Display data in property panel and emit signal
         if current_row >= 0:
-            
+            def get_cell_text(row, col):
+                item = self.table.item(row, col)
+                return item.text() if item else ""
+
+            def get_widget_value(row, col):
+                widget = self.table.cellWidget(row, col)
+                return ", ".join(widget.selected_items()) if widget and hasattr(widget, "selected_items") else ""
 
             data = {
-                "id": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
-                "name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
-                "damage_scenarios": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
-                "toe_configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
-                "misuse_cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
-                "asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
-                "security_property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
-                "reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
-                "comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
+                "id": get_cell_text(current_row, 1),
+                "name": get_cell_text(current_row, 2),
+                "damage_scenarios": get_widget_value(current_row, 3),     # ✅ multi-select
+                "toe_configuration": get_widget_value(current_row, 4),    # ✅ multi-select
+                "misuse_cases": get_widget_value(current_row, 5),         # ✅ multi-select
+                "asset": get_cell_text(current_row, 8),
+                "security_property": get_cell_text(current_row, 9),
+                "reasoning": get_cell_text(current_row, 10),
+                "comments": get_cell_text(current_row, 11)
             }
 
             print("-----------data-------------")
@@ -231,11 +235,13 @@ class Threat_Module(QWidget):
             }
             print("-----------payload-------------")
             print(payload)
-            self.display_row_data_in_panel(payload["data"])
+
+            self.display_row_data_in_panel(data)
             self.row_selected.emit(payload)
 
         self.update_button_states()
         interfaces.unsaved_changes = temp
+
 
     def select_first_row(self): 
         if self.table.rowCount() > 0: self.table.setCurrentCell(0, 1)
@@ -520,21 +526,34 @@ class Threat_Module(QWidget):
             return
 
         for label, widget in self.threat_property_controls:
-            if not label or not isinstance(label, str):
+            # Handle QLabel vs str
+            if hasattr(label, "text"):
+                label_text = label.text().strip()
+            elif isinstance(label, str):
+                label_text = label.strip()
+            else:
                 print(f"[WARNING] Skipping invalid label: {label}")
                 continue
 
-            key = label.lower().replace(" ", "_")
+            key = label_text.lower().replace(" ", "_")
             value = data.get(key, "")
 
-            print(f"[MAPPING] Label: {label} → key: {key} → value: {value}")
+            print(f"[MAPPING] Label: {label_text} → key: {key} → value: {value}")
 
             # Multi-select widgets
             if hasattr(widget, "set_selected_items"):
                 selected_items = [x.strip() for x in value.split(",") if x.strip()]
-                widget.set_selected_items(selected_items)
+                # Expand DS-10 to full value like "DS-10::Brake failure"
+                if hasattr(widget, "options"):
+                    expanded_items = []
+                    for item in selected_items:
+                        match = next((opt for opt in widget.options if opt.startswith(item)), None)
+                        if match:
+                            expanded_items.append(match)
+                    widget.set_selected_items(expanded_items)
+                else:
+                    widget.set_selected_items(selected_items)
 
-            # ComboBox / line-like widgets
             elif hasattr(widget, "setCurrentText"):
                 widget.setCurrentText(value.strip())
 
@@ -548,11 +567,11 @@ class Threat_Module(QWidget):
                 widget.set_text(value.strip())
 
             else:
-                print(f"[WARNING] No compatible setter found for {label}")
+                print(f"[WARNING] No compatible setter found for {label_text}")
 
-        # Expand panel if hidden
         if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
             self.property_panel_manager.toggle_button.click()
+
 
     def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
         combo = MultiSelectComboSelector(option_list, placeholder="Select")

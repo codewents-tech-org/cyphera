@@ -63,10 +63,15 @@ class MultiSelectComboSelector(QComboBox):
         return getattr(self, "selected", [])
 
     def set_selected_items(self, items):
+        selected = set(i.strip().lower() for i in items)
+
         for i in range(self.model().rowCount()):
+            item_text = self.itemText(i).strip().lower()
             item = self.model().item(i)
-            item.setCheckState(Qt.Checked if item.text() in items else Qt.Unchecked)
+            item.setCheckState(Qt.Checked if item_text in selected else Qt.Unchecked)
+
         self.update_text()
+
 
     def handle_item_clicked(self, index):
         item = self.model().itemFromIndex(index)
