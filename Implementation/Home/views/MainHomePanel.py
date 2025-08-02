@@ -19,7 +19,7 @@ from Home.controller.Recent_file_database_creation import Recent_file_DB_creatio
 import models.Parameters as P
 import utils.interface_utils as interfaces
 from PyQt5.QtGui import QPixmap
-
+from utils.recent_projects_utils import load_recent_projects, remove_project
 import qtawesome as qta  # Ensure qtawesome is installed: pip install qtawesome
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,QSpacerItem
 
@@ -141,29 +141,31 @@ class MainHome_Panel(QWidget):
         interfaces.home_sub_modules[3].on_click()
         # self.main_window.show_homeframe('MainOpen_Panel')
 
-    def open_project_from_recent(self, project_path):
-        if not Path(project_path).exists():
+    def open_project_from_recent(self, project):
+        project_path = project["path"]
+        mode = project.get("mode", "local")  # fallback
+
+        if not Path(project_path).exists() and mode == "local":
             reply = QMessageBox.warning(
-                None, "Information",
-                "Project Not Found",
-                QMessageBox.Ok 
+                None, "Information", "Project Not Found", QMessageBox.Ok
             )
-
             if reply == QMessageBox.Ok:
-                # Delete project from database
-                recent_db = Recent_file_DB_creation()
-                recent_db.delete_project(project_path)
-
-                # Refresh the recent projects list
+                remove_project(project_path)
                 self.load_recent_projects()
-            return 
-        recent_db = Recent_file_DB_creation()
-        recent_db.update_project_timestamp(project_path)
+            return
 
-        open_panel = MainOpen_Panel(self)  # Create an instance of MainOpen_Panel
-        open_panel.file_input.setText(project_path)  # Set the project path in the input field
-        open_panel.Open_Project()  # Call the method to open the project 
-        self.load_recent_projects()   
+        # Store current mode globally
+        P.project_storage_mode = mode
+        open_panel = MainOpen_Panel(self)
+        open_panel.file_input.setText(project_path)
+        open_panel.set_storage_mode(mode)
+        
+        if mode == "cloud":
+            open_panel.open_cloud_project(force_tara_path=project_path)
+        else:
+            open_panel.Open_Project()
+
+        self.load_recent_projects()
 
     def elide_text(text, max_width, font):
         """Truncate text with '...' if it exceeds max_width"""
@@ -176,48 +178,50 @@ class MainHome_Panel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        # Fetch recent projects
-        recent_db = Recent_file_DB_creation()
-        recent_projects = recent_db.fetch_recent_projects()
-        recent_db.close_db()
+        recent_projects = sorted(load_recent_projects(), key=lambda x: x["last_opened"], reverse=True)
 
-        if recent_projects:
-            for name, path in recent_projects:
-                # Create a separate frame for each project
-                project_widget = QWidget()
-                project_layout = QHBoxLayout(project_widget)
-                project_layout.setSpacing(10)
-                project_layout.setContentsMargins(10, 5, 10, 5)  # Add some padding
-
-                # Name Label (Fixed Width + Tooltip)
-                name_label = NameLabel(name)
-                name_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-                name_label.setStyleSheet("border: none; padding: 0px; margin: 0px; color: #009D9C;")
-                name_label.setToolTip(name)
-
-                # Path Label (Expandable + Truncated with Tooltip)
-                path_label = PathLabel(path.strip(), width=700)  # Adjust width as needed
-                path_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-                path_label.setStyleSheet("border: none; padding: 0px; margin: 0px; color: #607182;")
-                path_label.setCursor(Qt.PointingHandCursor)
-                path_label.setContentsMargins(0, 0, 0, 0)
-                path_label.setToolTip(path.strip())  # Show full path on hover
-                path_label.mousePressEvent = lambda event, p=path: self.open_project_from_recent(p)
-
-                # Add widgets to the project layout
-                project_layout.addWidget(name_label)
-                project_layout.addWidget(path_label)
-
-                # Ensure the widget is properly enclosed
-                project_widget.setLayout(project_layout)
-                project_widget.setStyleSheet("border: 0px;")  # Optional styling
-
-                # Add project_widget to the main layout
-                self.recent_projects_layout.addWidget(project_widget)
-
-        else:
-            no_projects_label = QLabel("")
+        if not recent_projects:
+            no_projects_label = QLabel("No recent projects.")
             no_projects_label.setStyleSheet(home_style.description_label_style)
             self.recent_projects_layout.addWidget(no_projects_label)
+            return
+
+        for project in recent_projects:
+            name = project["name"]
+            path = project["path"]
+            mode = project.get("mode", "local")
+
+            project_widget = QWidget()
+            project_layout = QHBoxLayout(project_widget)
+            project_layout.setSpacing(10)
+            project_layout.setContentsMargins(10, 5, 10, 5)
+
+            # 🌐 Icon: cloud or local
+            icon_label = QLabel()
+            icon_pixmap = QPixmap(P.cloud_icon if mode == "cloud" else P.local_icon)
+            icon_label.setPixmap(icon_pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            icon_label.setStyleSheet("margin-right: 2px;")  # spacing before name
+            project_layout.addWidget(icon_label)
+
+            name_label = NameLabel(name)
+            name_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            name_label.setStyleSheet("border: none; padding: 0px; margin: 0px; color: #009D9C;")
+            name_label.setToolTip(name)
+
+            path_label = PathLabel(path.strip(), width=700)
+            path_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            path_label.setStyleSheet("border: none; padding: 0px; margin: 0px; color: #607182;")
+            path_label.setCursor(Qt.PointingHandCursor)
+            path_label.setToolTip(path.strip())
+            path_label.mousePressEvent = lambda event, proj=project: self.open_project_from_recent(proj)
+
+            project_layout.addWidget(name_label)
+            project_layout.addWidget(path_label)
+
+            project_widget.setLayout(project_layout)
+            project_widget.setStyleSheet("border: 0px;")
+            self.recent_projects_layout.addWidget(project_widget)
+
+
 
 

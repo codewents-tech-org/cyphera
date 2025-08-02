@@ -98,7 +98,7 @@ class RiskTreatement_Module(QWidget):
         QApplication.processEvents()
 
         try:
-            AS.update_risktreatement_data()
+            # AS.update_risktreatement_data()
 
             goals = get_instances(SecurityGoals, {'is_deleted': False})
             claims = get_instances(SecurityClaims, {'is_deleted': False})

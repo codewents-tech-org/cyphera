@@ -147,10 +147,6 @@ class Attack_Tree(QWidget):
 
     # Load Attack Tree table data from the database
     def load_data(self):
-        if self.data_loaded:
-            self.table_data_changed = False
-            self.tab_container.setCurrentIndex(0)
-            return  # 🚫 Prevent reloading if already loaded
         
         interfaces.previous_tree = None
         self.tab_container.setCurrentIndex(0)
@@ -175,11 +171,21 @@ class Attack_Tree(QWidget):
             self.table_wrapper.insert_row([
                 tree.id,
                 tree.name,
-                tree.initial_afr if tree.initial_afr else '',
-                tree.resid_afr if tree.resid_afr else '',
+                '',
+                '',
                 '',
                 tree.comments if tree.comments else ''
             ])
+            if tree.initial_afr:
+                init_afr_item = QLineEdit(tree.initial_afr)
+                init_afr_item.setReadOnly(True)
+                helper.Apply_AFR_Level_Color(init_afr_item, tree.initial_afr)
+                self.table.setCellWidget(row_index, 3, init_afr_item)
+            if tree.resid_afr:
+                resid_afr_item = QLineEdit(tree.resid_afr)
+                resid_afr_item.setReadOnly(True)
+                helper.Apply_AFR_Level_Color(resid_afr_item, tree.resid_afr)
+                self.table.setCellWidget(row_index, 4, resid_afr_item)
             self.row_uuid_map[row_index] = tree.id
             self.add_multiselect_to_table_cell(row_index, 5, self.toe_configuration_option_list, tree.toe_configuration_id)
             self.tree_names_before[tree.id] = tree.comments
@@ -193,6 +199,8 @@ class Attack_Tree(QWidget):
 
         self.loader.close()
         self.data_loaded = True  # ✅ Mark as loaded
+        self.table_data_changed = False
+        interfaces.unsaved_changes = False
 
     def update_cache_data(self):
         row = self.table.currentRow()
@@ -204,8 +212,6 @@ class Attack_Tree(QWidget):
             return
         tree_id = id_item.text()
         name = name_item.text()
-        init_afr = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
-        resid_afr = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
         comments = self.table.item(row, 6).text() if self.table.item(row, 6) else ""
 
         if tree_id in AT_CACHE:
@@ -213,8 +219,6 @@ class Attack_Tree(QWidget):
             old_comments = record.comments
             changed = update_tree(tree_id, {
                 'name': name,
-                'initial_afr': init_afr,
-                'resid_afr': resid_afr,
                 'comments': comments
             })
             if changed and old_comments != comments:
@@ -227,9 +231,9 @@ class Attack_Tree(QWidget):
 
     # Highlight selected row in table
     def on_row_selection_changed(self):
-        # temp = interfaces.unsaved_changes
+        temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed2(self.table, self)
-        # interfaces.unsaved_changes = temp
+        interfaces.unsaved_changes = temp
 
     def get_index(self, index):
         self.index = index

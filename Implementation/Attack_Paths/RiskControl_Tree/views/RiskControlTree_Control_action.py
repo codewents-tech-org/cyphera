@@ -78,9 +78,9 @@ import utils.interface_utils as interfaces
 from Attack_Paths.components.customgraphics_view import CustomGraphicsView
 from Attack_Paths.RiskControl_Tree.controllers.riskcontroltree_scene import RiskControlTreeScene
 from components.threading_decorator import run_in_thread
-from controllers.schema_manager import get_instances
+from controllers.schema_manager import get_instances, get_max_numeric_suffix
 from Attack_Paths.RiskControl_Tree.controllers.database_to_rct import build_rc_tree_json
-from controllers.database_tables.attack_paths_tables import NodeType, ReferenceTrees, RiskControlTree
+from controllers.database_tables.attack_paths_tables import NodeType, ReferenceTrees, RiskControlTree, AttackIntermediateNodes, AttackLeafNodes
 
 import logging
 logger = logging.getLogger(__name__)
@@ -193,6 +193,8 @@ class ControlCTClass(QWidget):
         """
         logger.info("Load Risk Control Tree")
         try:
+            self.scene.last_intermediate_node_id = get_max_numeric_suffix(AttackIntermediateNodes, 'id','Nd')
+            self.scene.last_leaf_node_id = get_max_numeric_suffix(AttackLeafNodes, 'id','Lf')
             rct_nodes = get_instances(RiskControlTree, {'tree_id':self.control_id, 'is_deleted':False})
             
             if rct_nodes:

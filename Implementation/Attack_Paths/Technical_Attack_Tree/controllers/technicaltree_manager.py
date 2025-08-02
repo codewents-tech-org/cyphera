@@ -3,6 +3,7 @@ import logging
 from PyQt5.QtWidgets import QMessageBox
 from controllers.schema_manager import create_instance, get_instances, bulk_update_instances, get_max_numeric_suffix
 from controllers.tablemodel import TechnicalTreeHome
+from Attack_Paths.Technical_Attack_Tree.controllers.backend_table_data_update import update_tree_data
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ def delete_technical_tree(uuid):
 
 def persist_technical_tree_changes():
     updates = []
+    removed_tat_ids = []
 
     for uuid, entry in TECHNICAL_TREE_CACHE.items():
         if not entry['changed']:
@@ -91,6 +93,7 @@ def persist_technical_tree_changes():
         obj = entry['record']
         if entry['deleted']:
             updates.append({'uuid': uuid, 'is_deleted': True})
+            removed_tat_ids.append(obj.id)
         else:
             updates.append({
                 'uuid': uuid,
@@ -109,6 +112,7 @@ def persist_technical_tree_changes():
 
     if updates:
         bulk_update_instances(TechnicalTreeHome, updates)
+        update_tree_data(removed_tat_ids)
         logger.info(f"[✅] Persisted {len(updates)} Technical Tree records")
 
 
@@ -146,3 +150,5 @@ def generate_new_id():
 
     last_tt_number += 1
     return f"TAT-{last_tt_number}"
+
+

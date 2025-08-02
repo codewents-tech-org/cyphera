@@ -291,6 +291,9 @@ class Asset_Module(QWidget):
 
         # Load data into property panel
         if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
+            # ✅ Emit structured signal with current row data
             data = {
                 "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
                 "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
