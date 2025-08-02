@@ -10,7 +10,7 @@ import controllers.DatabaseCreator as DB
 import controllers.TableValueHighlight as TVH
 import controllers.TableValueHighlight as TVH
 import components.action_panel as action_panel
-
+import traceback
 from Attack_Paths.Attack_Leaves.views.attackleaves_toolbar_panel import create_toolbar
 from Attack_Paths.Attack_Leaves.views.attackleaves_table_panel import create_table_panel
 from Attack_Paths.Attack_Leaves.views.attackleaves_column_setup import Setup_Tabel_ColumnHeading
@@ -63,6 +63,7 @@ class Attack_Leaves(QWidget):
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.previous_text = None
+        self.load_data()
 
     # Load Attack Leaves data from the database
     def load_data(self):
@@ -86,8 +87,8 @@ class Attack_Leaves(QWidget):
                 self.table.insertRow(row_idx)
                 self.table.setRowHeight(row_idx, 40)
                 self.existing_entries.add(row.id)
-                is_selected = (row == self.table.currentRow())
-                self.table.setCellWidget(row, 0, TRI.SidebarWidget(row_idx=row, selected=is_selected))
+                is_selected = (row_idx == self.table.currentRow())
+                self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
                 id_item = QTableWidgetItem(row.id)
                 id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
                 self.table.setItem(row_idx, 1, id_item)
@@ -110,9 +111,12 @@ class Attack_Leaves(QWidget):
                 self.table.setItem(row_idx, 10, comment_item)
             if self.table.rowCount() > 0:
                 self.table.setCurrentCell(0, 1)
+       
         except Exception as e:
-            print(f"load error {e}")
-            
+            print(f"❌ load error: {e}")
+            traceback.print_exc()
+
+                    
 
     def create_attack_leaf_and_insert_row(self):
         leaf_id = generate_new_attack_leaf_id(self)
