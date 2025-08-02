@@ -14,6 +14,7 @@ from Security_Measurement.Security_Controls.controllers import security_controls
 from PyQt5.QtCore import pyqtSignal, Qt
 from controllers.tablemodel import SecurityGoals
 from controllers.schema_manager import get_instances
+from Security_Measurement.Security_Controls.controllers.security_controls_manager import SECURITY_CONTROLS_CACHE
 import Analysis.models.analysis_synchronization as AS
 import components.table.table_row_indicator as TRI
 from styles.property_panel_style import property_save_button_style
@@ -90,9 +91,13 @@ class SecurityControls_Module(QWidget):
         self.table.itemDoubleClicked.connect(self.store_selected_entry)
         self.table.itemChanged.connect(self.find_duplicates)
         self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
-        self.table.itemChanged.connect(self.set_unsaved_changes)
+        self.table.itemChanged.connect(self.set_unsaved_changes)  
 
     def load_data(self):
+        print("🚀 Starting load_data()")
+        self.table.setRowCount(0)
+        self.table.clearContents()
+        self.row_uuid_map = {}
         self.loader = RoundLoader(self, label_text="Loading...")
         self.loader.show()
         QApplication.processEvents()
@@ -229,6 +234,7 @@ class SecurityControls_Module(QWidget):
         self.table.setFocus()
         print("----------------step1----------------")
         SCM.persist_security_control_changes()
+        SECURITY_CONTROLS_CACHE.clear()
         print("----------------step2----------------")
         self.update_button_states()
         interfaces.unsaved_changes = False # Clear old rows

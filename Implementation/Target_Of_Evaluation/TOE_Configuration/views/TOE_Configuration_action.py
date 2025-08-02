@@ -30,7 +30,7 @@ from Target_Of_Evaluation.TOE_Configuration.controllers.TOE_Configuration_manage
 import utils.interface_utils as interfaces
 from models.unique_name_action import refrash_existing_entries, find_duplicates, store_selected_entry
 import controllers.TableValueHighlight as TVH
-
+import components.table.table_row_indicator as TRI
 
 logger = logging.getLogger(__name__)
 
@@ -112,20 +112,35 @@ class TOEConfigurationModule(QWidget):
 
     def on_row_selection_changed(self, selected, deselected):
         temp = interfaces.unsaved_changes
-        self.display_selected_row()
-        TVH.on_row_selection_changed(self.table)
+        current_row = self.table.currentRow()
 
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
+        # ✅ Update property panel
+        if current_row >= 0:
+            self.display_selected_row()
+            self.display_row_data_in_panel(None)
+
+            # ✅ Emit selected row data
             data = {
-                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                "Description": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                "Comments": self.table.item(row, 4).text() if self.table.item(row, 4) else ""
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Description": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
+                "Comments": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else ""
             }
             payload = {"sender": "Table", "event": "row_selected", "data": data}
             self.row_selected.emit(payload)
 
+        # ✅ Dot highlight update (e.g., sidebar indicator)
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Track selection for unsaved state
+        TVH.on_row_selection_changed(self.table)
+
+        # ✅ Update Add/Save/Delete button states
+        self.update_button_states()
+        
         interfaces.unsaved_changes = temp
 
     def select_first_row(self):
@@ -158,6 +173,8 @@ class TOEConfigurationModule(QWidget):
         records = load_all_toe_configurations()
         for row_index, record in enumerate(records):
             self.table.insertRow(row_index)
+            is_selected = (row_index == self.table.currentRow())
+            self.table.setCellWidget(row_index, 0, TRI.SidebarWidget(row_idx=row_index, selected=is_selected))
             self.table.setItem(row_index, 1, QTableWidgetItem(record.toe_configuration_id))
             self.table.setItem(row_index, 2, QTableWidgetItem(record.toe_configuration_name))
             self.table.setItem(row_index, 3, QTableWidgetItem(record.toe_configuration_description or ""))

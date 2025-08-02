@@ -149,17 +149,21 @@ class TraceabilityGraph_Module(QWidget):
             risk_rows = safe_get_instances(RiskData)
             risk_data_rows = get_instances(RiskData)
 
+            # Prepare mappings
             self.damage_scenarios_list = {row.ds_id: row.name for row in damage_scenario_rows}
             self.threats_list = {row.threat_id: row.name for row in threat_rows}
             self.risk_list = {}
 
+            # ✅ Fix: Use proper field names from RiskData ORM model
             for risk in risk_rows:
                 try:
-                    threat_raw = (risk.threat or '').strip()
-                    damage_raw = (risk.damage or '').strip()
-                    if " - " in threat_raw and " - " in damage_raw:
-                        threat_id, threat_name = threat_raw.split(" - ", 1)
-                        damage_id, damage_name = damage_raw.split(" - ", 1)
+                    threat_id = (risk.threat_id or '').strip()
+                    damage_id = (risk.ds_id or '').strip()
+
+                    threat_name = self.threats_list.get(threat_id, "")
+                    damage_name = self.damage_scenarios_list.get(damage_id, "")
+
+                    if threat_name and damage_name:
                         self.risk_list[f"{threat_id} {damage_id}"] = (damage_name, threat_name)
                 except Exception as inner_e:
                     logger.warning(f"Skipping malformed risk entry: {inner_e}")
@@ -168,6 +172,7 @@ class TraceabilityGraph_Module(QWidget):
             self.security_claims_list = {row.sc_id: row.name for row in security_claims_rows}
             self.security_controls_list = {row.scc_id: row.name for row in security_controls_rows}
 
+            # Goal → Control mapping
             self.security_goals_control_list = {}
             for sg in security_goals_rows:
                 control_lists = []
@@ -179,18 +184,19 @@ class TraceabilityGraph_Module(QWidget):
                         control_lists.append(sc.scc_id)
                 self.security_goals_control_list[sg.sg_id] = control_lists
 
+            # Generate traceability links
             self.traceability_link = {}
             path_count = 0
             for risk in risk_data_rows:
                 try:
-                    damage_id = (risk.damage or '').strip().split(' - ')[0]
-                    threat_id = (risk.threat or '').strip().split(' - ')[0]
+                    damage_id = (risk.ds_id or '').strip()
+                    threat_id = (risk.threat_id or '').strip()
 
-                    claims_list = [c.strip() for c in (risk.security_claims or '').split(',') if c.strip()]
-                    goals_list = [g.strip() for g in (risk.security_goals or '').split(',') if g.strip()]
+                    claims_list = [c.strip() for c in (risk.security_claims_id or '').split(',') if c.strip()]
+                    goals_list = [g.strip() for g in (risk.security_goal_id or '').split(',') if g.strip()]
                     controls_list = [c.strip() for c in (risk.mitigated_by or '').split(',') if c.strip()]
 
-                    # Goal → Control links
+                    # Goal → Control
                     for goal, control_list in self.security_goals_control_list.items():
                         if goal in goals_list:
                             if control_list:

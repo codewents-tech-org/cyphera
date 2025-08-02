@@ -138,11 +138,13 @@ def update_technicaltree_table():
 
 
 def update_risktreatment_table():
+    print("-------------------update_risktreatment_table---------------------------")
     # 1. Fetch all AttackTree nodes with node_type = "riskcontrol head"
     attacktree_nodes = get_instances(
         AttackTree,
         filters={"node_type": NodeType.RCT_HEAD}
     )
+    print("-----------attacktree_nodes--------------------")
 
     # 2. Build control <-> threat mappings
     attacktree_linked_controls_CT = {}  # Control to Threat(s)
@@ -167,6 +169,7 @@ def update_risktreatment_table():
 
     # 3. Update all RiskData rows
     risks = get_instances(RiskData)
+    print("------------------------------------",risks)
     for risk in risks:
         # Map: risk.threat_id (in new model) == threat_id ('TH-21', etc)
         threat_id_key = risk.threat_id

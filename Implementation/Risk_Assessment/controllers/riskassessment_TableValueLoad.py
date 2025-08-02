@@ -264,14 +264,14 @@ def load_securitygoals(self, table, property_panel, toggle_button):
         for row_idx, row in enumerate(rows):
             table.insertRow(row_idx)
             table.setRowHeight(row_idx, 40)
-            self.existing_entries.add(row.id)
+            self.existing_entries.add(row.rd_id)
 
             # Column 0: Sidebar
             sidebar = TRI.SidebarWidget()
             table.setCellWidget(row_idx, 0, sidebar)
 
             # Column 1: ID (read-only)
-            id_item = QTableWidgetItem(row.id)
+            id_item = QTableWidgetItem(row.rd_id)
             id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
             table.setItem(row_idx, 1, id_item)
 
@@ -356,14 +356,14 @@ def load_securitycontrols(self, table, property_panel, toggle_button):
         for row_idx, row in enumerate(rows):
             table.insertRow(row_idx)
             table.setRowHeight(row_idx, 40)
-            self.existing_entries.add(row.id)
+            self.existing_entries.add(row.rd_id)
 
             # Column 0: Sidebar
             sidebar = TRI.SidebarWidget()
             table.setCellWidget(row_idx, 0, sidebar)
 
             # Column 1: ID
-            id_item = QTableWidgetItem(row.id)
+            id_item = QTableWidgetItem(row.rd_id)
             id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
             table.setItem(row_idx, 1, id_item)
 
@@ -401,6 +401,7 @@ def load_risktreatement(self, table, property_panel, toggle_button):
     logger.info("Loading Risk Treatment Data")
     try:
         table.setColumnCount(14)
+        table.setColumnWidth(0, 28) 
         table.verticalHeader().setVisible(False)
 
         header_item = QTableWidgetItem('')
@@ -430,8 +431,8 @@ def load_risktreatement(self, table, property_panel, toggle_button):
             toggle_button.setEnabled(False)
             return
 
-        SC_list = [f"{sc.id}::{sc.name}" for sc in security_claims if sc.id and sc.name]
-        SG_list = [f"{sg.id}::{sg.name}" for sg in security_goals if sg.id and sg.name]
+        SC_list = [f"{sc.sc_id}::{sc.name}" for sc in security_claims if sc.sc_id and sc.name]
+        SG_list = [f"{sg.sg_id}::{sg.name}" for sg in security_goals if sg.sg_id and sg.name]
         TOEC_list = [f"{t.toe_configuration_id}::{t.toe_configuration_name}" for t in toe_configuration if t.toe_configuration_id and t.toe_configuration_name]
 
         table.setRowCount(0)
@@ -439,14 +440,15 @@ def load_risktreatement(self, table, property_panel, toggle_button):
         for row_idx, row in enumerate(risk_data_rows):
             table.insertRow(row_idx)
             table.setRowHeight(row_idx, 40)
+            
 
             # ID
-            id_item = QTableWidgetItem(row.id)
+            id_item = QTableWidgetItem(row.rd_id)
             id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
             table.setItem(row_idx, 1, id_item)
 
             # Damage Scenario
-            damage_item = QTableWidgetItem(row.damage or "")
+            damage_item = QTableWidgetItem(row.ds_id or "")
             damage_item.setFlags(damage_item.flags() & ~Qt.ItemIsEditable)
             table.setItem(row_idx, 2, damage_item)
 
@@ -467,12 +469,13 @@ def load_risktreatement(self, table, property_panel, toggle_button):
                 impact.setStyleSheet(f"background-color: {impact_colors[row.impact]}; font-size: 14px;")
 
             # Threat
-            threat_item = QTableWidgetItem(row.threat or "")
+            threat_item = QTableWidgetItem(row.threat_id or "")
             threat_item.setFlags(threat_item.flags() & ~Qt.ItemIsEditable)
             table.setItem(row_idx, 4, threat_item)
 
+
             # Init AFR Level
-            init_afr = QLineEdit(row.initial_afr or "")
+            init_afr = QLineEdit(row.init_afr_level or "")
             init_afr.setReadOnly(True)
             init_afr.setAlignment(Qt.AlignCenter)
             table.setCellWidget(row_idx, 5, init_afr)
@@ -483,11 +486,11 @@ def load_risktreatement(self, table, property_panel, toggle_button):
                 'Low': "#5ce1e6",
                 'Very Low': "#cefdff"
             }
-            if row.initial_afr in afr_colors:
-                init_afr.setStyleSheet(f"background-color: {afr_colors[row.initial_afr]}; font-size: 14px;")
+            if row.init_afr_level in afr_colors:
+                init_afr.setStyleSheet(f"background-color: {afr_colors[row.init_afr_level]}; font-size: 14px;")
 
             # Init AFR Value
-            afr_val = QLineEdit(str(row.afr_val or ""))
+            afr_val = QLineEdit(str(row.init_afr_value or ""))
             afr_val.setReadOnly(True)
             afr_val.setAlignment(Qt.AlignCenter)
             table.setCellWidget(row_idx, 6, afr_val)
@@ -499,28 +502,28 @@ def load_risktreatement(self, table, property_panel, toggle_button):
                 '2': "#ffde59",
                 '1': "#7ed957"
             }
-            if str(row.afr_val) in afr_val_colors:
-                afr_val.setStyleSheet(f"background-color: {afr_val_colors[str(row.afr_val)]}; font-size: 14px;")
+            if str(row.init_afr_value) in afr_val_colors:
+                afr_val.setStyleSheet(f"background-color: {afr_val_colors[str(row.init_afr_value)]}; font-size: 14px;")
 
             # Resid AFR Level
-            resid_afr = QLineEdit(row.residual_afr or "")
+            resid_afr = QLineEdit(row.resid_afr_level or "")
             resid_afr.setReadOnly(True)
             resid_afr.setAlignment(Qt.AlignCenter)
             table.setCellWidget(row_idx, 7, resid_afr)
-            if row.residual_afr in afr_colors:
-                resid_afr.setStyleSheet(f"background-color: {afr_colors[row.residual_afr]}; font-size: 14px;")
+            if row.resid_afr_level in afr_colors:
+                resid_afr.setStyleSheet(f"background-color: {afr_colors[row.resid_afr_level]}; font-size: 14px;")
 
             # Resid AFR Value
-            resid_val = QLineEdit(str(row.residual_afr_val or ""))
+            resid_val = QLineEdit(str(row.resid_afr_value or ""))
             resid_val.setReadOnly(True)
             resid_val.setAlignment(Qt.AlignCenter)
             table.setCellWidget(row_idx, 8, resid_val)
-            if str(row.residual_afr_val) in afr_val_colors:
-                resid_val.setStyleSheet(f"background-color: {afr_val_colors[str(row.residual_afr_val)]}; font-size: 14px;")
+            if str(row.resid_afr_value) in afr_val_colors:
+                resid_val.setStyleSheet(f"background-color: {afr_val_colors[str(row.resid_afr_value)]}; font-size: 14px;")
 
             # TOE Configuration
             toe_combo = MOS.ReadOnlyMultiSelectComboBox(TOEC_list)
-            toe_ids = [id.strip() for id in (row.toe_configuration or "").split(",")]
+            toe_ids = [id.strip() for id in (row.toe_configuration_id or "").split(",")]
             selected_toe = [x for x in TOEC_list if any(f"{tid}::" in x for tid in toe_ids)]
             toe_combo.set_text(selected_toe)
             table.setCellWidget(row_idx, 9, toe_combo)
@@ -533,7 +536,7 @@ def load_risktreatement(self, table, property_panel, toggle_button):
 
             # Security Claims
             sc_combo = MOS.TSMultiSelectComboBox(SC_list)
-            sc_ids = [id.strip() for id in (row.security_claims or "").split(",")]
+            sc_ids = [id.strip() for id in (row.security_claims_id or "").split(",")]
             selected_sc = [x for x in SC_list if any(f"{sid}::" in x for sid in sc_ids)]
             sc_combo.set_text(selected_sc)
             sc_combo.currentTextChanged.connect(self.set_unsaved_changes)
@@ -541,7 +544,7 @@ def load_risktreatement(self, table, property_panel, toggle_button):
 
             # Security Goals
             sg_combo = MOS.TSMultiSelectComboBox(SG_list)
-            sg_ids = [id.strip() for id in (row.security_goals or "").split(",")]
+            sg_ids = [id.strip() for id in (row.security_goal_id or "").split(",")]
             selected_sg = [x for x in SG_list if any(f"{sid}::" in x for sid in sg_ids)]
             sg_combo.set_text(selected_sg)
             sg_combo.currentTextChanged.connect(self.set_unsaved_changes)
@@ -553,8 +556,10 @@ def load_risktreatement(self, table, property_panel, toggle_button):
             table.setItem(row_idx, 13, mitigated_by_item)
 
             # Sidebar
-            sidebar = TRI.SidebarWidget()
-            table.setCellWidget(row_idx, 0, sidebar)
+            is_selected = (row_idx== table.currentRow())
+            print(f"[DEBUG] Setting SidebarWidget at row {row_idx} → selected={is_selected}")
+            table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
+            
 
         if table.rowCount() > 0:
             table.setCurrentCell(0, 1)

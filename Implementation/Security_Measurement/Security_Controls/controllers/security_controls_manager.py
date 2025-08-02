@@ -43,7 +43,7 @@ def create_security_control(scc_id, name, security_goal_id, description, comment
         comments=comments,
         created_by="system",
         updated_by="system",
-        is_deleted=False
+        is_deleted= False
     )
 
     created = create_instance(control)
@@ -94,7 +94,7 @@ def persist_security_control_changes():
 
         obj = entry['record']
         if entry['deleted']:
-            updates.append({'uuid': uuid, 'is_deleted': 'True'})
+            updates.append({'uuid': uuid, 'is_deleted': True})
             print("----------------step5----------------")
         else:
             updates.append({
@@ -104,7 +104,7 @@ def persist_security_control_changes():
                 'comments': obj.comments,
                 'security_goal_id': obj.security_goal_id,
                 'updated_by': obj.updated_by,
-                'is_deleted': 'False'
+                'is_deleted': False
             })
             print("----------------step6----------------")
 

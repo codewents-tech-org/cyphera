@@ -177,6 +177,7 @@ class TS_Module(QWidget):
         # Connect table signals
         self.table.itemChanged.connect(self.update_button_states)
         self.table.itemChanged.connect(self.set_unsaved_changes)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.previous_text = None

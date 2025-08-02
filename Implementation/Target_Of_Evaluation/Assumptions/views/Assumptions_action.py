@@ -82,6 +82,7 @@ from components.propertypanel.property_input_components import PropertyInputFact
 from styles.property_panel_style import property_save_button_style
 from PyQt5.QtCore import pyqtSignal
 import controllers.TableValueHighlight as TVH
+import components.table.table_row_indicator as TRI
 import Target_Of_Evaluation.controllers.assum_PropertyValueDisplay as PVD
 import components.action_panel as action_panel
 import components.table.table_panel as table_panel
@@ -160,22 +161,47 @@ class Assumptions(QWidget):
         self.table.itemChanged.connect(self.set_unsaved_changes)
         self.table.itemDoubleClicked.connect(self.store_selected_entry)
         self.table.itemChanged.connect(self.find_duplicates)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.previous_text = None
 
     def on_row_selection_changed(self, selected, deselected):
+        current_row = self.table.currentRow()
+
+        # ✅ Update property panel
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
+        # ✅ Emit selection signal with row data
         temp = interfaces.unsaved_changes
-        self.display_selected_row()
         TVH.on_row_selection_changed(self.table)
+        if current_row >= 0:
+            data = {
+                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "Comments": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else ""
+            }
+            payload = {"sender": "Table", "event": "row_selected", "data": data}
+            self.row_selected.emit(payload)
+        interfaces.unsaved_changes = temp
+
+        # ✅ Update dot highlight (e.g., custom sidebar widget indicators)
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # ✅ Update button states (enable/disable Add, Save, Delete, etc.)
+        self.update_button_states()
 
         if self.table.currentRow() >= 0:
             row = self.table.currentRow()
             data = {
-                "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                "Comments": self.table.item(row, 3).text() if self.table.item(row, 3) else ""
-            }
+                    "ID": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
+                    "Name": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
+                    "Comments": self.table.item(row, 3).text() if self.table.item(row, 3) else ""
+                }
             payload = {"sender": "Table", "event": "row_selected", "data": data}
             self.row_selected.emit(payload)
 
@@ -199,15 +225,15 @@ class Assumptions(QWidget):
         QApplication.processEvents()
 
     # ✅ Set 4 columns to allow column 0 (can hide it)
-        self.table.setColumnCount(4)
+        self.table.setColumnCount(4)  # 0th + 3 visible headers
+
 
     # ✅ Set headers (leave column 0 blank for sidebar or hide)
         headers = ["", "ID", "Assumptions", "Comments"]
         for idx, title in enumerate(headers):
             self.table.setHorizontalHeaderItem(idx, QTableWidgetItem(title))
-
-    # ✅ Hide column 0 if not used
-        self.table.setColumnHidden(0, True)
+            
+        self.table.setColumnWidth(0, 20)  # ✅ Visible dot area
 
     # ✅ Stretch layout
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -222,6 +248,8 @@ class Assumptions(QWidget):
         for assumption in assumptions:
             row = self.table.rowCount()
             self.table.insertRow(row)
+            is_selected = (row == self.table.currentRow())
+            self.table.setCellWidget(row, 0, TRI.SidebarWidget(row_idx=row, selected=is_selected))
             self.table.setItem(row, 1, QTableWidgetItem(assumption.assumption_id))
             self.table.setItem(row, 2, QTableWidgetItem(assumption.assumptions))
             self.table.setItem(row, 3, QTableWidgetItem(assumption.comments or ""))

@@ -224,22 +224,22 @@ def risktreatment_submit_changes(table):
 
             # 2️⃣ Create RiskData ORM instance
             record = RiskData(
-                id=row_data[0],
-                damage=row_data[1],
+                rd_id=row_data[0],
+                ds_id=row_data[1],
                 impact=row_data[2],
-                threat=row_data[3],
-                initial_afr=row_data[4],
-                afr_val=row_data[5],
-                residual_afr=row_data[6],
-                residual_afr_val=row_data[7],
+                threat_id=row_data[3],
+                init_afr_level=row_data[4],
+                init_afr_value=row_data[5],
+                resid_afr_level=row_data[6],
+                resid_afr_value=row_data[7],
                 mitigated_by=row_data[8],
-                toe_configuration=row_data[9],
+                toe_configuration_id=row_data[9],
                 risk_treatment=row_data[10],
-                security_claims=row_data[11],
-                security_goals=row_data[12],
-                uuid=str(uuid.uuid4()),
-                is_deleted=False
+                security_claims_id=row_data[11],
+                security_goal_id=row_data[12],
+                uuid=str(uuid.uuid4())
             )
+
 
             new_instances.append(record)
 

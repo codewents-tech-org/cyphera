@@ -17,6 +17,7 @@ import components.propertypanel.property_panel_layout as property_panel_layout
 from components.loading_dialog import RoundLoader
 import Analysis.models.analysis_synchronization as AS
 import utils.interface_utils as interfaces
+import components.table.table_row_indicator as TRI
 
 
 class RiskTreatement_Module(QWidget):
@@ -85,6 +86,7 @@ class RiskTreatement_Module(QWidget):
         # ✅ Table signal connections
         self.table.itemChanged.connect(self.update_button_states)
         self.table.itemChanged.connect(self.set_unsaved_changes)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
 
         self.update_button_states()
@@ -164,19 +166,40 @@ class RiskTreatement_Module(QWidget):
         self.submit_button.setEnabled(has_data)
 
     def on_row_selection_changed(self, selected, deselected):
-        TVH.on_row_selection_changed(self.table)
-        if self.table.currentRow() >= 0:
-            row = self.table.currentRow()
+        current_row = self.table.currentRow()
+        print(f"[DEBUG] Current selected row: {current_row}")
+
+        # ✅ Update property panel
+        if current_row >= 0:
+            self.display_row_data_in_panel(None)
+
+            # ✅ Emit row data
             data = {}
-            for col, header in enumerate([
+            headers = [
                 "ID", "Damage", "Impact", "Threat", "Initial AFR", "Initial Risk",
                 "Resid AFR", "Resid Risk", "TOE Configuration", "Risk Treatment",
                 "Security Claims", "Security Goals", "Mitigated By"
-            ], start=1):
-                item = self.table.item(row, col)
+            ]
+            for col, header in enumerate(headers, start=1):  # Assumes column 0 is SidebarWidget
+                item = self.table.item(current_row, col)
                 data[header] = item.text() if item else ""
             payload = {"sender": "Table", "event": "row_selected", "data": data}
             self.row_selected.emit(payload)
+
+        # ✅ Update dot highlight
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                is_selected = (row == current_row)
+                print(f"[DEBUG] → Row {row}: SidebarWidget.set_selected({is_selected})")
+                widget.set_selected(is_selected)
+                # widget.set_selected(row == current_row)
+
+        # ✅ Track selection for unsaved detection
+        # TVH.on_row_selection_changed(self.table)
+
+        # ✅ Update Save/Add/Delete/etc. buttons
+        self.update_button_states()
 
     def display_row_data_in_panel(self, data):
         PVD.RiskTreatment_display_selected_row(
