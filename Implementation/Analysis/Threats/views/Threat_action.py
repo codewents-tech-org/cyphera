@@ -575,7 +575,7 @@ class Threat_Module(QWidget):
         # ✅ On change, update value in DB + UI
         def on_selection_change():
             value = ", ".join(combo.selected_items())
-            self.table.setItem(row_index, column_index, QTableWidgetItem(value))
+            
             uuid = self.row_uuid_map.get(row_index)
             if uuid:
                 update_threat(uuid, {update_field: value})
