@@ -157,8 +157,10 @@ class MainHome_Panel(QWidget):
         # Store current mode globally
         P.project_storage_mode = mode
         open_panel = MainOpen_Panel(self)
-        open_panel.file_input.setText(project_path)
         open_panel.set_storage_mode(mode)
+        open_panel.file_input.setText(project_path)
+        open_panel.latest_project_path = project_path  # ✅ Fix: set correct path
+
         
         if mode == "cloud":
             open_panel.open_cloud_project(force_tara_path=project_path)

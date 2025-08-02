@@ -181,7 +181,7 @@ class Application(QMainWindow):
             vertical_line.setStyleSheet(footer_style.footer_line_style)
             footer_layout.addWidget(vertical_line)
 
-            footer_version_label = QLabel("Version V3.0.1")
+            footer_version_label = QLabel("Version V3.0.2")
             footer_layout.addWidget(footer_version_label, alignment=Qt.AlignLeft)
 
             # Add vertical line after the logo

@@ -63,7 +63,12 @@ def load_settings(self):
                 mod_label.setStyleSheet(sub_module_style.sub_module_label_style)
                 module_layout.addWidget(mod_label)
                 self.submodule_sidebar.addWidget(module_frame)
+                
 
+                if module_name in interfaces.sub_modules:
+                    del interfaces.sub_modules[module_name]
+
+                # ✅ Fresh assignment
                 interfaces.sub_modules[module_name] = {
                     "name": module_name,
                     "module": button,
@@ -102,9 +107,9 @@ def load_settings(self):
                                 "action": lambda test=True, m=module_name, s=sub, f=self.frames[name]: self.emit_submodule_signal(test, m, s, f),
                                 "frame": self.frames[name]
                             }
-                            if index == 0: 
-                                interfaces.sub_modules[module["name"]]["current_submodule"] = name
-                                interfaces.sub_modules[module["name"]]["default_submodule"] = name
+                            if index == 0:
+                                    interfaces.sub_modules[module["name"]]["current_submodule"] = name
+                                    interfaces.sub_modules[module["name"]]["default_submodule"] = name
                             print(f'''[Sidebar] Adding submodule: {name} in module: {module_name}''')
 
                         except (ImportError, AttributeError) as e:

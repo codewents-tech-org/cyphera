@@ -103,6 +103,7 @@ from controllers.database_tables.target_of_evaluation_tables import Misusecases 
 from controllers.database_tables.analysis_tables import DamageScenarios  # adjust import to your model
 from controllers.database_tables.target_of_evaluation_tables import TOEConfiguration  # adjust import
 from components.table.multiselect_combo import MultiSelectComboSelector
+from PyQt5.QtCore import QTimer
 
 
 class Threat_Module(QWidget):
@@ -264,12 +265,17 @@ class Threat_Module(QWidget):
         self.submit_button.setEnabled(row_count > 0)
 
     def load_data(self):
-        # ✅ Show loading animation
-        self.loader = RoundLoader(self, label_text="Loading...")
-        self.loader.show()
+        """
+        Shows the loader and defers actual table loading.
+        """
+        self.show_loader("Loading...")
         QApplication.processEvents()
-
-        # ✅ 1. Populate dropdown options in unified format
+        QTimer.singleShot(50, self.load_threat_data)  # Slight delay to allow loader render
+    def load_threat_data(self):
+        """
+        Loads all threat records into the table and updates the property panel.
+        """
+        # 1. Populate dropdown options
         self.damage_scenarios_option_list = [
             f"{ds.ds_id}::{ds.name}" for ds in get_instances(DamageScenarios)
         ]
@@ -280,7 +286,7 @@ class Threat_Module(QWidget):
             f"{ms.misuse_cases_id}::{ms.misuse_cases_name}" for ms in get_instances(Misusecases)
         ]
 
-        # ✅ 2. Populate property panel dropdowns (optional UI filters)
+        # 2. Populate property panel dropdowns
         self.threat_damage_scenarios_input.additem(self.damage_scenarios_option_list)
         self.threat_damage_scenarios_input.set_text('')
         self.threat_toe_configuration_input.additem(self.toe_configuration_option_list)
@@ -288,7 +294,7 @@ class Threat_Module(QWidget):
         self.threat_misuse_cases_input.additem(self.misuse_cases_option_list)
         self.threat_misuse_cases_input.set_text('')
 
-        # ✅ 3. Column → DB field map
+        # 3. Define field mappings
         self.threat_column_field_map = {
             "ID": "threat_id",
             "Name": "name",
@@ -303,14 +309,13 @@ class Threat_Module(QWidget):
             "Comments": "comments"
         }
 
-        # ✅ 4. Columns with dropdown options
         self.threat_dropdown_columns = {
             "Damage Scenarios": self.damage_scenarios_option_list,
             "TOE Configuration": self.toe_configuration_option_list,
             "Misuse cases": self.misuse_cases_option_list
         }
 
-        # ✅ 5. Load rows
+        # 4. Load rows
         self.table.setRowCount(0)
         self.row_uuid_map = {}
         threats = load_all_threats()
@@ -320,9 +325,8 @@ class Threat_Module(QWidget):
             self.table.insertRow(row_idx)
             is_selected = (row_idx == self.table.currentRow())
             self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
-            
 
-            for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
+            for col_idx, header in enumerate(threat_headers, start=1):
                 field = self.threat_column_field_map[header]
                 value = getattr(threat, field, "") or ""
 
@@ -332,11 +336,16 @@ class Threat_Module(QWidget):
                 else:
                     self.table.setItem(row_idx, col_idx, QTableWidgetItem(value))
 
-            # Map UUID
             self.row_uuid_map[row_idx] = threat.uuid
 
         interfaces.unsaved_changes = False
-        self.loader.close()
+
+        # ✅ Close loader safely
+        if hasattr(self, 'loader') and self.loader:
+            self.loader.close()
+            self.loader.deleteLater()
+            self.loader = None
+
         print("✅ Threat table loaded successfully.")
 
     def refresh_data(self):
@@ -603,6 +612,9 @@ class Threat_Module(QWidget):
         combo.model().dataChanged.connect(on_selection_change)
         self.table.setCellWidget(row_index, column_index, combo)
 
-        
+    def show_loader(self, text):
+        self.loader = RoundLoader(self, label_text=text)
+        self.loader.show()
+        QApplication.processEvents()    
 
 
