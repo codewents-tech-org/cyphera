@@ -50,12 +50,12 @@ None (widget methods modify UI/state in place).
 
 import logging
 from typing import Optional
-
+import models.Parameters as P  # already imported
 # PyQt5 imports (disable false-positive no-name-in-module)
 # pylint: disable=E0611
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QDialog
 from PyQt5.QtWidgets import QTextEdit
-from PyQt5.QtCore    import pyqtSignal, QTimer, Qt, QEvent, QObject
+from PyQt5.QtCore    import pyqtSignal, QTimer, Qt, QEvent, QObject, QUrl
 from PyQt5.QtGui     import QColor, QFont, QTextCharFormat, QTextCursor, QTextBlockFormat
 # pylint: enable=E0611
 
@@ -68,8 +68,9 @@ from .controllers.lists      import ListController
 from .controllers.alignment  import AlignmentController
 from .controllers.table      import TableController
 from .controllers.image      import ImageController
-
-logger = logging.getLogger(__name__)
+from pathlib import Path
+import controllers.DatabaseCreator as DB
+logger = logging.getLogger("description editor")
 
 
 class DescriptionEditor(QWidget):  # pylint: disable=too-few-public-methods
@@ -155,6 +156,10 @@ class DescriptionEditor(QWidget):  # pylint: disable=too-few-public-methods
         self.text_edit = CleanTextEdit(parent=self)
         self.text_edit.setFont(QFont(self.current_font_family, self.current_font_size))
 
+        # ✅ Set Base URL so relative image paths render correctly
+        base_path = Path(P.project_path).as_posix()
+        print(f"[DEBUG] Setting base URL for images: {base_path}")
+        self.text_edit.document().setBaseUrl(QUrl.fromLocalFile(base_path + "/"))
         # Default character format
         default_fmt = QTextCharFormat()
         default_fmt.setFontPointSize(self.current_font_size)
@@ -242,6 +247,9 @@ class DescriptionEditor(QWidget):  # pylint: disable=too-few-public-methods
             None
         """
         html = self.text_edit.toHtml()
+        preview = html[:500] + "..." if len(html) > 500 else html
+        logger.debug("[DEBUG] on_save triggered. Emitting HTML content.")
+        logger.debug(f"[DEBUG] HTML Content Preview:\n{preview}")
         self.content_changed.emit(html)
 
     def detect_newline_reset(self) -> None:

@@ -179,7 +179,7 @@ class PropertyInputFactory:
             layout.addWidget(input_widget)
 
             layout.addItem(QSpacerItem(0, 20, QSizePolicy.Minimum, QSizePolicy.Fixed))
-            controls_list.append([label, input_widget])
+            controls_list.append([label, input_widget]) 
 
             if signal:
                 if isinstance(input_widget, QComboBox):

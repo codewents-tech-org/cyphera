@@ -90,6 +90,7 @@ import controllers.TableValueHighlight as TVH
 import components.action_panel as action_panel
 import components.table.table_panel as table_panel
 import components.propertypanel.property_panel_layout as property_panel_layout
+from components.table.multiselect_combo import MultiSelectComboSelector
 import Analysis.models.analysis_synchronization as AS
 import utils.interface_utils as interfaces
 from components.loading_dialog import RoundLoader

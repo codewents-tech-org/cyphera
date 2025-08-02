@@ -73,7 +73,7 @@ Change History:
 
 from venv import logger
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidgetItem, QMessageBox, QHBoxLayout, QLabel
-
+from PyQt5.QtCore import Qt
 import Analysis.controllers.analysis_TableValueLoad as TVL
 import Analysis.controllers.analysis_TableAddRecord as TAR
 import Analysis.controllers.analysis_TableRemoveRecord as TRR
@@ -229,12 +229,53 @@ class Asset_Module(QWidget):
         self.data_loaded = True
 
 
+    def add_new_entry(self):
+        self.table.setFocus()
+
+        # 🔌 Disconnect duplicate tracking to avoid false triggers
+        try:
+            self.table.itemChanged.disconnect(self.find_duplicates)
+        except (TypeError, RuntimeError):
+            pass
+
+        # 🆕 Generate new asset
+        asset_id = generate_new_asset_id()
+        asset_name = f"Asset {asset_id.split('-')[-1]}"
+        asset = Assets(
+            asset_id=asset_id,
+            name=asset_name,
+            security_properties="",
+            description="",
+            comments="",
+            created_by="system",
+            updated_by="system"
+        )
+        add_new_asset(asset)  # ✅ Add to DB/cache
+
+        # ➕ Insert row into table
+        row_idx = self.table.rowCount()
+        self.table.insertRow(row_idx)
+        self.table.setItem(row_idx, 1, QTableWidgetItem(asset.asset_id))
+        self.table.setItem(row_idx, 2, QTableWidgetItem(asset.name))
+        self.add_multiselect_to_security_property_cell(row_idx, "")
+        self.table.setItem(row_idx, 4, QTableWidgetItem(""))
+        self.table.setItem(row_idx, 5, QTableWidgetItem(""))
+
+        # 🔁 Track row → ID map and name backup
+        self.row_id_map[row_idx] = asset.asset_id
+        self.asset_names_before[asset.asset_id] = asset.name
+
+        # ✅ Update UI and logic
+        self.update_button_states()
+        interfaces.unsaved_changes = True
+
+        # 🔁 Reconnect
+        self.table.itemChanged.connect(self.find_duplicates)
+
+   
     def on_row_selection_changed(self, selected, deselected):
         """
-        Handles row selection:
-        - Emits structured row data
-        - Highlights only the selected row's sidebar indicator (dot)
-        - Updates property panel and button states
+        Handles row selection by loading data into the property panel.
         """
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
@@ -242,21 +283,18 @@ class Asset_Module(QWidget):
         current_row = self.table.currentRow()
         total_rows = self.table.rowCount()
 
-        # ✅ Highlight dot indicator on the selected row
+        # Highlight only the selected row's sidebar indicator
         for row in range(total_rows):
             widget = self.table.cellWidget(row, 0)
             if isinstance(widget, TRI.SidebarWidget):
                 widget.set_selected(row == current_row)
 
-        # ✅ Load data into property panel
+        # Load data into property panel
         if current_row >= 0:
-            self.display_row_data_in_panel(None)
-
-            # ✅ Emit structured signal with current row data
             data = {
                 "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
                 "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
-                "Security Properties": ", ".join(self.table.cellWidget(current_row, 3).selected_items()) if self.table.cellWidget(current_row, 3) else "",
+                "Security Properties": self.table.cellWidget(current_row, 3).selected_items() if self.table.cellWidget(current_row, 3) else [],
                 "Description": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
                 "Comments": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
             }
@@ -266,8 +304,8 @@ class Asset_Module(QWidget):
                 "data": data
             }
             self.row_selected.emit(payload)
-
-        # ✅ Refresh buttons
+            
+        # Refresh buttons
         self.update_button_states()
         interfaces.unsaved_changes = temp
 
@@ -320,51 +358,7 @@ class Asset_Module(QWidget):
     def store_selected_entry(self, item): store_selected_entry(self, item)
     
     def refresh_data(self): TFR.asset_refresh_data(self.table)
-
-    def add_new_entry(self):
-        self.table.setFocus()
-
-        # 🔌 Disconnect duplicate tracking to avoid false triggers
-        try:
-            self.table.itemChanged.disconnect(self.find_duplicates)
-        except (TypeError, RuntimeError):
-            pass
-
-        # 🆕 Generate new asset
-        asset_id = generate_new_asset_id()
-        asset_name = f"Asset {asset_id.split('-')[-1]}"
-        asset = Assets(
-            asset_id=asset_id,
-            name=asset_name,
-            security_properties="",
-            description="",
-            comments="",
-            created_by="system",
-            updated_by="system"
-        )
-        add_new_asset(asset)  # ✅ Add to DB/cache
-
-        # ➕ Insert row into table
-        row_idx = self.table.rowCount()
-        self.table.insertRow(row_idx)
-        self.table.setItem(row_idx, 1, QTableWidgetItem(asset.asset_id))
-        self.table.setItem(row_idx, 2, QTableWidgetItem(asset.name))
-        self.add_multiselect_to_security_property_cell(row_idx, "")
-        self.table.setItem(row_idx, 4, QTableWidgetItem(""))
-        self.table.setItem(row_idx, 5, QTableWidgetItem(""))
-
-        # 🔁 Track row → ID map and name backup
-        self.row_id_map[row_idx] = asset.asset_id
-        self.asset_names_before[asset.asset_id] = asset.name
-
-        # ✅ Update UI and logic
-        self.update_button_states()
-        interfaces.unsaved_changes = True
-
-        # 🔁 Reconnect
-        self.table.itemChanged.connect(self.find_duplicates)
-
-        
+     
     def delete_entry(self): 
      
         selected_rows = sorted(self.table.selectionModel().selectedRows(), key=lambda x: x.row(), reverse=True)
@@ -401,7 +395,9 @@ class Asset_Module(QWidget):
                 continue
             asset_id = asset_id_item.text()
             name = asset_name_item.text()
-            security_properties = self.table.item(row, 3).text() if self.table.item(row, 3) else ""
+            combo_widget = self.table.cellWidget(row, 3)
+            security_properties = ", ".join(combo_widget.selected_items()) if combo_widget else ""
+
             description = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
             comments = self.table.item(row, 5).text() if self.table.item(row, 5) else ""
 
@@ -515,9 +511,11 @@ class Asset_Module(QWidget):
 
             # 🔁 For multi-select / combo boxes
             if hasattr(widget, "set_selected_items"):
-                text = table_item.text() if table_item else ""
-                selected = [x.strip() for x in text.split(",")] if text else []
-                widget.set_selected_items(selected)
+                if cell_widget and hasattr(cell_widget, "selected_items"):
+                    selected = cell_widget.selected_items()
+                    widget.set_selected_items(selected)
+                else:
+                    widget.set_selected_items([])
 
             # 🔁 For plain text fields
             elif hasattr(widget, "setText"):
@@ -536,35 +534,39 @@ class Asset_Module(QWidget):
                 value = table_item.text().strip() if table_item and table_item.text() else ""
                 widget.set_text(value)
 
-        # Optional: visually open the property panel
+        # ✅ Automatically open the property panel if it's collapsed
         if self.panel_manager.toggle_button and not self.panel_manager.toggle_button.isChecked():
             self.panel_manager.toggle_button.click()
 
     def add_multiselect_to_security_property_cell(self, row_index, current_value=None):
         from models.helper import asset_security_properties_menu
 
+        # 🔁 Always create a new instance
         combo = MultiSelectComboSelector(asset_security_properties_menu, placeholder="Select")
+
+        # ✅ Populate selection if value is provided
         if current_value:
-            if isinstance(current_value, str):
-                selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
-            else:
-                selected_items = current_value
+            selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
             combo.set_selected_items(selected_items)
 
         def on_selection_change():
-            value = ", ".join(combo.selected_items())
-            self.table.setItem(row_index, 3, QTableWidgetItem(value))
-            if hasattr(self, 'row_id_map') and row_index in self.row_id_map:
+            selected = combo.selected_items()
+            value = ", ".join(selected)
+
+            # ❌ DO NOT call: self.table.setItem(row_index, 3, QTableWidgetItem(value))
+            # ✅ Instead: update internal state + backend cache
+            if row_index in self.row_id_map:
                 asset_id = self.row_id_map[row_index]
                 from Analysis.controllers.asset_manager import update_asset
                 update_asset(asset_id, {"security_properties": value})
                 interfaces.unsaved_changes = True
 
+        # ✅ React to selection changes
         combo.model().dataChanged.connect(on_selection_change)
+
+        # ✅ Inject the widget into the cell
         self.table.setCellWidget(row_index, 3, combo)
 
-
-                
 class InlineSidebarWidget(QWidget):
     def __init__(self, selected=False, parent=None):
         super().__init__(parent)
