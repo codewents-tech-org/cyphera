@@ -1,0 +1,6 @@
+SERVER_HOST=77.37.47.181
+SERVER_USER=root
+SERVER_PASSWORD=CWroot@tech1722  # or use SSH key path
+REMOTE_BASE_PATH=/var/www/cyphera
+SERVER_PORT = 22
+REMOTE_ENV_PATH = /var/www/cyphera/.env
