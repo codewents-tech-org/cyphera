@@ -431,8 +431,9 @@ class MainNew_Panel(QWidget):
         print(f"✅ Project '{project_name}' created with configuration file at '{config_file_path}'.")
 
         # Open the project immediately
-        self.file_input.setText(str(config_file_path))
-        self.open_local_project(str(config_file_path))
+        
+        self.latest_project_path = str(config_file_path)
+
 
     def show_project_exists_warning(self):
         warning_msg = QMessageBox()
