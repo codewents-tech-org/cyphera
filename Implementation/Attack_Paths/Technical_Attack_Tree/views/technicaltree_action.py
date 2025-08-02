@@ -158,10 +158,6 @@ class TechnicalTreeModule(QWidget):
 
     # Load Attack Tree table data from the database
     def load_data(self):
-        if self.data_loaded:
-            self.table_data_changed = False
-            self.tab_container.setCurrentIndex(0)
-            return  # 🚫 Prevent reloading if already loaded
         
         interfaces.previous_tree = None
         self.tab_container.setCurrentIndex(0)
@@ -204,6 +200,8 @@ class TechnicalTreeModule(QWidget):
                 self.technical_tree_names_before[tree.id] = tree.name
 
             self.data_loaded = True
+            self.table_data_changed = False
+            interfaces.unsaved_changes = False
 
         except Exception as e:
             logger.exception("❌ Error loading Technical Trees")
@@ -379,6 +377,7 @@ class TechnicalTreeModule(QWidget):
 
         # Update "Submit" button state
         self.submit_button.setEnabled(row_count > 0)
+        self.delete_button.setEnabled(row_count > 0 and has_selection)
 
     def update_toolbar_tree_label(self, index):  
         logger.info(f"Switched to tab {self.inner_tab_widget.tabText(index)}")

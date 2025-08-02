@@ -144,10 +144,6 @@ class RiskControl_Tree(QWidget):
     # Load Risk Control Tree table data from the database
     def load_data(self):
         logger.info("Risk Control Tree Table Data Loading Started")
-        if self.data_loaded:
-            self.table_data_changed = False
-            self.tab_container.setCurrentIndex(0)
-            return  # 🚫 Prevent reloading if already loaded
         
         interfaces.previous_tree = None
         self.tab_container.setCurrentIndex(0)
@@ -189,6 +185,8 @@ class RiskControl_Tree(QWidget):
 
         self.loader.close()
         self.data_loaded = True  # ✅ Mark as loaded
+        self.table_data_changed = False
+        interfaces.unsaved_changes = False
 
     def update_cache_data(self):
         row = self.table.currentRow()

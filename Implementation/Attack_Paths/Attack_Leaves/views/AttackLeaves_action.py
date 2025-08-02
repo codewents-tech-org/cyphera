@@ -78,37 +78,41 @@ class Attack_Leaves(QWidget):
         #self.loader.close()
 
     def attack_leaves_load_data(self):
-        self.table.setRowCount(0)
-        self.existing_entries.clear()
-        rows = load_all_attack_leaves()
-        for row_idx, row in enumerate(rows):
-            self.table.insertRow(row_idx)
-            self.table.setRowHeight(row_idx, 40)
-            self.existing_entries.add(row.id)
-            is_selected = (row == self.table.currentRow())
-            self.table.setCellWidget(row, 0, TRI.SidebarWidget(row_idx=row, selected=is_selected))
-            id_item = QTableWidgetItem(row.id)
-            id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row_idx, 1, id_item)
-            name_item = QTableWidgetItem(row.name)
-            self.table.setItem(row_idx, 2, name_item)
-            for i, (val, col_idx) in enumerate(zip(
-                [row.time, row.expertise, row.knowledge, row.access, row.equipment], [3,4,5,6,7])):
-                combo = MOS.CustomComboBoxLeave(helper.attackpath_leaf_values_menu[i])
-                combo.set_text(str(val) if val is not None else "0")
-                combo.currentTextChanged.connect(self.set_unsaved_changes)
-                combo.currentIndexChanged.connect(lambda: self.Update_AFR_Level(combo))
-                self.table.setCellWidget(row_idx, col_idx, combo)
-            afr_item = QLineEdit(row.afr_level if row.afr_level else 'High')
-            afr_item.setReadOnly(True)
-            helper.Apply_AFR_Level_Color(afr_item, row.afr_level or 'High')
-            self.table.setCellWidget(row_idx, 8, afr_item)
-            reasoning_item = QTableWidgetItem(row.reasoning or '')
-            self.table.setItem(row_idx, 9, reasoning_item)
-            comment_item = QTableWidgetItem(row.comments or '')
-            self.table.setItem(row_idx, 10, comment_item)
-        if self.table.rowCount() > 0:
-            self.table.setCurrentCell(0, 1)
+        try:
+            self.table.setRowCount(0)
+            self.existing_entries.clear()
+            rows = load_all_attack_leaves()
+            for row_idx, row in enumerate(rows):
+                self.table.insertRow(row_idx)
+                self.table.setRowHeight(row_idx, 40)
+                self.existing_entries.add(row.id)
+                is_selected = (row == self.table.currentRow())
+                self.table.setCellWidget(row, 0, TRI.SidebarWidget(row_idx=row, selected=is_selected))
+                id_item = QTableWidgetItem(row.id)
+                id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+                self.table.setItem(row_idx, 1, id_item)
+                name_item = QTableWidgetItem(row.name)
+                self.table.setItem(row_idx, 2, name_item)
+                for i, (val, col_idx) in enumerate(zip(
+                    [row.time, row.expertise, row.knowledge, row.access, row.equipment], [3,4,5,6,7])):
+                    combo = MOS.CustomComboBoxLeave(helper.attackpath_leaf_values_menu[i])
+                    combo.set_text(str(val) if val is not None else "0")
+                    combo.currentTextChanged.connect(self.set_unsaved_changes)
+                    combo.currentIndexChanged.connect(lambda: self.Update_AFR_Level(combo))
+                    self.table.setCellWidget(row_idx, col_idx, combo)
+                afr_item = QLineEdit(row.afr_level if row.afr_level else 'High')
+                afr_item.setReadOnly(True)
+                helper.Apply_AFR_Level_Color(afr_item, row.afr_level or 'High')
+                self.table.setCellWidget(row_idx, 8, afr_item)
+                reasoning_item = QTableWidgetItem(row.reasoning or '')
+                self.table.setItem(row_idx, 9, reasoning_item)
+                comment_item = QTableWidgetItem(row.comments or '')
+                self.table.setItem(row_idx, 10, comment_item)
+            if self.table.rowCount() > 0:
+                self.table.setCurrentCell(0, 1)
+        except Exception as e:
+            print(f"load error {e}")
+            
 
     def create_attack_leaf_and_insert_row(self):
         leaf_id = generate_new_attack_leaf_id(self)

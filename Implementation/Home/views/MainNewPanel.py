@@ -1,6 +1,5 @@
 import os
 import sys
-from turtle import mode
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QToolTip, QWidget, QVBoxLayout, QGridLayout, QHBoxLayout, QFileDialog, QPushButton, QComboBox, QLabel, QFrame, QLineEdit, QSizePolicy, QStackedWidget, QButtonGroup
 from PyQt5.QtGui import QIcon, QCursor, QFont, QPainter, QFontMetrics
 from PyQt5.QtCore import QTimer, Qt, QSize
@@ -40,7 +39,6 @@ from controllers.database import get_engine_and_session, initialize_database
 from PyQt5.QtGui import QPixmap, QFont, QTextOption  # Import necessary classes
 from PyQt5.QtWidgets import QTextEdit, QSizePolicy  # For QTextEdit widget and size policies
 import styles.Tool_style as Tool_style
-from PyQt5.QtCore import QThread, pyqtSignal, QObject
 
 from dotenv import dotenv_values
 from utils.server_connection import check_server_and_license
@@ -49,11 +47,11 @@ from utils.server_connection import create_remote_project_folder
 from models import Parameters as P
 from dotenv import dotenv_values
 from utils.server_connection import check_server_and_license, create_remote_project_folder, create_remote_config_structure, create_postgres_database_for_project, write_remote_tara_config
-from controllers.database import get_engine_and_session
+from controllers.database import get_engine_and_session, initialize_database
 import os, json
 import os
 from dotenv import load_dotenv
-from components.loading_dialog import RoundLoader
+
 
 # Load .env from the current directory (or specify path as needed)
 from dotenv import load_dotenv
@@ -172,9 +170,10 @@ class MainNew_Panel(QWidget):
         content_layout.addItem(spacer_item)
         main_layout.addWidget(content_wrapper)
      
+
+
     def set_storage_mode(self, mode):
         self.storage_mode = mode
-        P.project_storage_mode = mode  # ✅ Set global mode
         self.update_toggle_button_styles()
         if mode == 'cloud':
             print("base path22222222222222------------",self.base_path)
@@ -198,106 +197,52 @@ class MainNew_Panel(QWidget):
             self.file_input.setText(directory_path)
 
     def Create_New_Project(self):
-        self.loader = RoundLoader(self, label_text="Creating project...")
-        self.loader.show()
-        QApplication.processEvents()
+        if self.storage_mode == 'cloud':
+            self.create_remote_project()
+        else:
+            from pathlib import Path
+            self.create_project_with_config_file(Path(self.file_input.text()))
 
-        self.thread = QThread()
-        self.worker = ProjectCreationWorker(self)
-        self.worker.moveToThread(self.thread)
-
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.project_creation_complete)
-        self.worker.failed.connect(self.project_creation_failed)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.failed.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
-
-    
     def create_remote_project(self):
-        from models import Parameters as P
-        from utils.server_connection import (
-            fetch_env_from_server, get_db_env_vars,
-            create_remote_project_folder, create_remote_config_structure,
-            write_remote_tara_config
-        )
-        from controllers.database import get_engine_and_session, initialize_database
-        from urllib.parse import quote_plus
-        import json, os, psycopg2
-
+        global config_file_path
         print("\n🔄 [TARA] Starting remote project creation...\n")
-
-        # 📥 Step 0: Get user input
         project_name = self.project_name_input.text().strip()
         author = self.author_input.text().strip()
         client = self.client_input.text().strip()
         supplier = self.supplier_input.text().strip()
         methodology = self.dropdown.currentText()
 
-        # 🛡️ Step 1: Ensure global .env is present
+        success, message = check_server_and_license()
+        if not success:
+            print("❌ Server connection failed. Project creation aborted.")
+            return
+
         local_env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../cyphera/.env"))
-        if not os.path.exists(local_env_path):
-            if not fetch_env_from_server():
-                print("❌ Server connection failed. Project creation aborted.")
-                return
-        env_vars = get_db_env_vars()
+        env_vars = dotenv_values(local_env_path)
         if not env_vars:
             print("❌ Failed to parse .env.")
             return
 
-        # 📁 Step 2: Create remote project structure
+        print("🌍 Remote .env loaded:")
+        for k, v in env_vars.items():
+            print(f"   {k} = {v}")
+
         if not create_remote_project_folder(project_name):
             print("❌ Remote project folder creation failed.")
             return
+
         create_remote_config_structure(project_name)
-
-        # 🛢️ Step 3: Create PostgreSQL DB
-        db_user = env_vars.get("DB_USER")
-        db_password = env_vars.get("DB_PASSWORD")
-        db_host = env_vars.get("DB_HOST")
-        db_port = env_vars.get("DB_PORT", "5432")
-        password_encoded = quote_plus(db_password)
-
-        try:
-            conn = psycopg2.connect(
-                dbname="postgres",
-                user=db_user,
-                password=db_password,
-                host=db_host,
-                port=db_port
-            )
-            conn.autocommit = True
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (project_name,))
-            if not cur.fetchone():
-                cur.execute(f"CREATE DATABASE \"{project_name}\"")
-                print(f"✅ Created PostgreSQL DB: {project_name}")
-            else:
-                print(f"ℹ️ Database '{project_name}' already exists.")
-            cur.close()
-            conn.close()
-        except Exception as e:
-            print(f"❌ PostgreSQL DB creation failed: {e}")
+        db_url = create_postgres_database_for_project(project_name, env_vars)
+        if not db_url:
+            print("❌ Postgres DB creation failed. Aborting.")
             return
 
-        # 🧠 Step 4: Store connection info in Parameters
-        db_url = f"postgresql://{db_user}:{password_encoded}@{db_host}:{db_port}/{project_name}"
-        P.Project_name = project_name
-        P.Author_name = author
-        P.Client_name = client
-        P.Supplier_name = supplier
-        P.selected_methedology = methodology
+        print(f"✅ Postgres DB initialized: {db_url}")
+        from models import Parameters as P
         P.SQLALCHEMY_DATABASE_URL = db_url
-        P.project_path = f"{os.getenv('REMOTE_BASE_PATH')}/{project_name}"
-
-        # ⚙️ Step 5: Initialize ORM and session
         get_engine_and_session()
         initialize_database()
 
-        # 📦 Step 6: Write remote .tara config
         tara_config = {
             "project_name": project_name,
             "version": "1.0",
@@ -305,17 +250,18 @@ class MainNew_Panel(QWidget):
             "client": client,
             "supplier": supplier,
             "methodology": methodology,
-            "dependencies": [],
-            "db_url": db_url,
-            "project_path": P.project_path
+            "dependencies": []
         }
+
+        config_file_path = os.path.join(self.base_path, project_name, f"{project_name}.tara")
         write_remote_tara_config(project_name, tara_config)
 
-        # 🚀 Step 7: Auto-open newly created project
-        local_tara_path = os.path.join("cyphera", "tmp", f"{project_name}.tara")
-        self.file_input.setText(local_tara_path)
-        # self.open_local_project(local_tara_path)
-        self.latest_project_path = local_tara_path
+        print(f"📦 Project '{project_name}' fully initialized in remote server.")
+
+        self.file_input.setText(str(config_file_path))
+        self.open_local_project(str(config_file_path))
+
+
 
     def open_local_project(self, project_path=None):
         global config_file_path
@@ -336,10 +282,8 @@ class MainNew_Panel(QWidget):
         interfaces.tool_reset_enable = False
 
         database_path = self.get_database_file_path(config_file_path=project_path)
-        if not P.SQLALCHEMY_DATABASE_URL:
-            P.database_file_path = database_path
-            P.SQLALCHEMY_DATABASE_URL = f"sqlite:///{database_path}"
-
+        P.database_file_path = database_path
+        P.SQLALCHEMY_DATABASE_URL = f"sqlite:///{database_path}"
         print(f"🔗 [DEBUG][LOCAL] SQLite URL: {P.SQLALCHEMY_DATABASE_URL}")
 
         get_engine_and_session()
@@ -363,8 +307,6 @@ class MainNew_Panel(QWidget):
             module_name = interfaces.default_modules["module"]["name"]
             submodule_name = interfaces.default_modules["submodule"]["name"]
             interfaces.previous_module = interfaces.sub_modules[module_name]["submodules"][submodule_name]["frame"]
-            print("loader if starting insindie--------------------")
-
         except KeyError as e:
             print(f"[ERROR] Could not fetch previous_module frame: {e}")
             interfaces.previous_module = None
@@ -377,8 +319,10 @@ class MainNew_Panel(QWidget):
 
         print("✅ [DEBUG][LOCAL] Local project fully opened and UI state reset.")
 
+
+
     def create_project_with_config_file(self, selected_base_path, config_extension=".tara", config_data=None):
-        from controllers.database import get_engine_and_session
+        from controllers.database import get_engine_and_session, initialize_database
         from models import Parameters as P
         import json
         from pathlib import Path
@@ -431,8 +375,8 @@ class MainNew_Panel(QWidget):
         print(f"✅ Project '{project_name}' created with configuration file at '{config_file_path}'.")
 
         # Open the project immediately
-        
-        self.latest_project_path = str(config_file_path)
+        self.file_input.setText(str(config_file_path))
+        self.open_local_project(str(config_file_path))
 
 
     def show_project_exists_warning(self):
@@ -487,44 +431,3 @@ class MainNew_Panel(QWidget):
         except Exception as e:
             print(f"[ERROR] Failed to read config file for DB path: {e}")
             return ""
-
-    def project_creation_complete(self):
-        if hasattr(self, "loader") and self.loader:
-            self.loader.hide()
-
-        # ✅ Run open_local_project from here — in main thread!
-        if hasattr(self, "latest_project_path") and self.latest_project_path:
-            self.file_input.setText(self.latest_project_path)
-            self.open_local_project(self.latest_project_path)
-
-
-    def project_creation_failed(self, error_message):
-        print(f"[ERROR] Project creation failed: {error_message}")
-        if hasattr(self, "loader") and self.loader:
-            self.loader.hide()
-        QMessageBox.critical(self, "Error", f"Project creation failed:\n{error_message}")
-
-
-class ProjectCreationWorker(QObject):
-    finished = pyqtSignal()
-    failed = pyqtSignal(str)
-
-    def __init__(self, panel):
-        super().__init__()
-        self.panel = panel
-        self.result_path = None  # store output path
-
-    def run(self):
-        try:
-            if self.panel.storage_mode == 'cloud':
-                from pathlib import Path
-                project_name = self.panel.project_name_input.text().strip()
-                self.panel.create_remote_project()  # 🔁 update to NOT touch UI inside
-                self.result_path = os.path.join("cyphera", "tmp", f"{project_name}.tara")
-            else:
-                from pathlib import Path
-                self.panel.create_project_with_config_file(Path(self.panel.file_input.text()))
-                self.result_path = str(self.panel.file_input.text())
-            self.finished.emit()
-        except Exception as e:
-            self.failed.emit(str(e))

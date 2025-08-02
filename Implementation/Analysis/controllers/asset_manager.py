@@ -22,7 +22,7 @@ def load_all_assets():
     global ASSET_CACHE
     logger.info("🔄 Loading assets from DB...")
     ASSET_CACHE.clear()
-    assets = get_instances(Assets)
+    assets = get_instances(Assets, {"is_deleted": 'False'})
     for asset in assets:
         ASSET_CACHE[asset.asset_id] = {
             'record': asset,
@@ -73,12 +73,12 @@ def persist_asset_changes():
         # 🔁 Trigger all sync operations as part of post-submit logic
         AS.sync_threats_with_assets()
         AS.update_threatscenario_from_threat()
-        AS.update_risktreatement_data()
         AS.sync_attack_tree_with_threats()
         AS.remove_orphaned_attack_tree_rows()
+        AS.update_risktreatement_data()
         AS.remove_nonexistent_threat_scenarios_from_Risk_data()
         # TSS.update_scope_assets()
-        # TSS.update_scope_threats()
+        TSS.update_scope_threats()
         logger.info("✅ Asset-related sync operations completed.")
         
     else:
@@ -98,7 +98,7 @@ def delete_asset(asset_id):
     Marks asset as deleted and removes from cache and DB.
     """
     if asset_id in ASSET_CACHE:
-        delete_instance(Assets, {"asset_id": asset_id})
+        update_instance(Assets, {"asset_id": asset_id}, {"is_deleted": 'True'})
         ASSET_CACHE[asset_id]['deleted'] = True
         logger.info(f"🗑️ Deleted asset {asset_id} from DB and cache.")
 

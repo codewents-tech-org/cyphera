@@ -1,24 +1,24 @@
 import os
-import json
-import stat
 import paramiko
-import psycopg2
 from dotenv import dotenv_values, load_dotenv
-from urllib.parse import quote_plus
+import psycopg2
+import stat  # <-- ADD THIS
+import json
 from controllers.schema_manager import initialize_database
-import models.Parameters as P
-from controllers.database import get_engine_and_session
-
+from urllib.parse import quote_plus
 def check_server_and_license():
+    # Load local .env to read server credentials
     load_dotenv()
 
     host = os.getenv("SERVER_HOST")
-    port = int(os.getenv("SERVER_PORT", "22"))
+    port = int(os.getenv("SERVER_PORT", "22"))  # Optional, default 22
     username = os.getenv("SERVER_USER")
     password = os.getenv("SERVER_PASSWORD")
 
+    # ✅ Correct path on the server
     remote_env_path = os.getenv("REMOTE_ENV_PATH")
 
+    # ✅ Local destination (will create `cyphera` if not exists)
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     cyphera_dir = os.path.join(base_dir, "cyphera")
     os.makedirs(cyphera_dir, exist_ok=True)
@@ -33,15 +33,16 @@ def check_server_and_license():
         sftp.get(remote_env_path, local_env_path)
         print("✅ .env file fetched successfully.")
 
-        # 🔐 Store the session globally
-        P.ssh_transport = transport
-        P.sftp = sftp
+        sftp.close()
+        transport.close()
 
         return True, "Connected and verified"
     except Exception as e:
         print(f"[ERROR] check_server_and_license(): {type(e).__name__} - {e}")
         return False, f"Server or license check failed: {e}"
 
+
+# utils/server_connection.py
 
 def create_remote_project_folder(project_name: str) -> bool:
     host = os.getenv("SERVER_HOST")
@@ -64,10 +65,8 @@ def create_remote_project_folder(project_name: str) -> bool:
             sftp.mkdir(project_path)
             print(f"✅ Created folder: {project_path}")
 
-        # 🔐 Store session
-        P.ssh_transport = transport
-        P.sftp = sftp
-
+        sftp.close()
+        transport.close()
         return True
 
     except Exception as e:
@@ -75,6 +74,7 @@ def create_remote_project_folder(project_name: str) -> bool:
         return False
 
 
+# utils/server_connection.py (continued)
 def create_remote_config_structure(project_name: str) -> bool:
     base_path = os.getenv("REMOTE_BASE_PATH")
     host = os.getenv("SERVER_HOST")
@@ -94,10 +94,8 @@ def create_remote_config_structure(project_name: str) -> bool:
         sftp.file(f"{project_dir}/README.md", 'w').close()
         sftp.file(f"{project_dir}/requirements.txt", 'w').close()
 
-        # 🔐 Store session
-        P.ssh_transport = transport
-        P.sftp = sftp
-
+        sftp.close()
+        transport.close()
         print("✅ Remote config folder and files created.")
         return True
 
@@ -106,13 +104,21 @@ def create_remote_config_structure(project_name: str) -> bool:
         return False
 
 
+# utils/server_connection.py (continued)
+
+
 def create_postgres_database_for_project(project_name: str, env_vars: dict) -> str | None:
     try:
+        import models.Parameters as P
+        from controllers.database import get_engine_and_session, initialize_database
+
+        # 1. Load DB credentials from env_vars
         db_user = env_vars.get("DB_USER")
         db_password = env_vars.get("DB_PASSWORD")
         db_host = env_vars.get("DB_HOST")
         db_port = env_vars.get("DB_PORT", "5432")
 
+        # 2. Connect to default 'postgres' DB to create new one
         conn = psycopg2.connect(
             dbname="postgres",
             user=db_user,
@@ -133,49 +139,60 @@ def create_postgres_database_for_project(project_name: str, env_vars: dict) -> s
         cur.close()
         conn.close()
 
-        password_encoded = quote_plus(db_password)
-        db_url = f"postgresql://{db_user}:{password_encoded}@{db_host}:{db_port}/{project_name}"
-
-        # 🔗 Set Parameters globally
+        # 3. Setup SQLAlchemy config to point to the new DB
         P.db_type = "postgres"
         P.db_user = db_user
         P.db_password = db_password
         P.db_host = db_host
         P.db_port = db_port
         P.current_db_name = project_name
-        P.SQLALCHEMY_DATABASE_URL = db_url
+        password_encoded = quote_plus(db_password)
 
+        P.SQLALCHEMY_DATABASE_URL = f"postgresql://{db_user}:{password_encoded}@{db_host}:{db_port}/{project_name}"
+
+        # 4. Initialize engine + create all tables defined in Base.metadata
         get_engine_and_session()
         initialize_database()
 
-        return db_url
+        return P.SQLALCHEMY_DATABASE_URL
 
     except Exception as e:
         print(f"❌ PostgreSQL DB creation failed: {e}")
         return None
 
 
+# utils/server_connection.py (continued)
 def write_remote_tara_config(project_name: str, config_dict: dict) -> bool:
+
+    host = os.getenv("SERVER_HOST")
+    port = int(os.getenv("SERVER_PORT", 22))
+    username = os.getenv("SERVER_USER")
+    password = os.getenv("SERVER_PASSWORD")
+    base_path = os.getenv("REMOTE_BASE_PATH")
+
+    remote_config_path = f"{base_path}/{project_name}/{project_name}.tara"
+    json_bytes = json.dumps(config_dict, indent=4).encode('utf-8')
+
     try:
-        _, sftp = get_sftp()
-        remote_config_path = f"{os.getenv('REMOTE_BASE_PATH')}/{project_name}/{project_name}.tara"
-        json_bytes = json.dumps(config_dict, indent=4).encode('utf-8')
+        transport = paramiko.Transport((host, port))
+        transport.connect(username=username, password=password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
 
         with sftp.file(remote_config_path, 'w') as remote_file:
             remote_file.write(json_bytes)
         print(f"✅ .tara config written to: {remote_config_path}")
 
+        sftp.close()
+        transport.close()
         return True
 
     except Exception as e:
         print(f"❌ Failed to write .tara config: {e}")
         return False
 
-
 def get_sftp():
-    if hasattr(P, "sftp") and P.sftp and hasattr(P, "ssh_transport") and P.ssh_transport:
-        return P.ssh_transport, P.sftp
-
+    from dotenv import load_dotenv
+    load_dotenv()
     host = os.getenv("SERVER_HOST")
     port = int(os.getenv("SERVER_PORT", 22))
     username = os.getenv("SERVER_USER")
@@ -183,19 +200,7 @@ def get_sftp():
     transport = paramiko.Transport((host, port))
     transport.connect(username=username, password=password)
     sftp = paramiko.SFTPClient.from_transport(transport)
-
-    P.ssh_transport = transport
-    P.sftp = sftp
-    return transport, sftp
-
-
-def close_ssh_session():
-    if hasattr(P, "sftp") and P.sftp:
-        P.sftp.close()
-        P.sftp = None
-    if hasattr(P, "ssh_transport") and P.ssh_transport:
-        P.ssh_transport.close()
-        P.ssh_transport = None
+    return transport, sftp  # <--- You need both to close later!
 
 
 def list_cloud_folders_with_sftp(sftp, base=None):
@@ -206,19 +211,23 @@ def list_cloud_folders_with_sftp(sftp, base=None):
             folders.append(entry.filename)
     return sorted(folders)
 
-
 def list_cloud_files_with_sftp(sftp, folder, base=None):
     base_path = base or os.getenv("REMOTE_BASE_PATH")
     path = base_path.rstrip("/") + "/" + folder
     items = sftp.listdir_attr(path)
     folders = [f.filename for f in items if stat.S_ISDIR(f.st_mode) and not f.filename.startswith('.')]
-    tara_files = [f.filename for f in items if f.filename.lower().endswith(".tara")]
-    other_files = [f.filename for f in items if not f.filename.lower().endswith(".tara") and not stat.S_ISDIR(f.st_mode)]
+    tara_files = [f.filename for f in items if f.filename.lower().endswith(".tara") and not stat.S_ISDIR(f.st_mode)]
+    other_files = [f.filename for f in items if not f.filename.lower().endswith(".tara") and not stat.S_ISDIR(f.st_mode) and not f.filename.startswith('.')]
     return folders + tara_files + other_files
 
 
 def fetch_env_from_server():
-    load_dotenv()
+    """
+    Fetches the remote /../..cyphera/.env to local ./cyphera/.env.
+    Returns: True if fetched, False if error.
+    """
+    from dotenv import load_dotenv
+    load_dotenv()  # Load local creds for SFTP
 
     host = os.getenv("SERVER_HOST")
     port = int(os.getenv("SERVER_PORT", "22"))
@@ -232,8 +241,12 @@ def fetch_env_from_server():
     local_env_path = os.path.join(cyphera_dir, ".env")
 
     try:
-        transport, sftp = get_sftp()
+        transport = paramiko.Transport((host, port))
+        transport.connect(username=username, password=password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
         sftp.get(remote_env_path, local_env_path)
+        sftp.close()
+        transport.close()
         print("✅ .env file fetched successfully.")
         return True
     except Exception as e:
@@ -242,6 +255,10 @@ def fetch_env_from_server():
 
 
 def read_local_env():
+    """
+    Loads ./cyphera/.env and returns it as a dict (using dotenv_values).
+    """
+    from dotenv import dotenv_values
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     local_env_path = os.path.join(base_dir, "cyphera", ".env")
     env_vars = dotenv_values(local_env_path)
@@ -251,33 +268,17 @@ def read_local_env():
 
 
 def get_db_env_vars():
-    print("🌐 [DEBUG] Attempting to fetch remote .env...")
-    if not fetch_env_from_server():
-        print("❌ [ERROR] Could not fetch remote .env.")
-        return {}
-
-    local_env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cyphera", ".env"))
-    print(f"📂 [DEBUG] Reading fetched .env from: {local_env_path}")
-
-    try:
-        with open(local_env_path, "rb") as f:
-            raw_bytes = f.read()
-            print("📜 [DEBUG] .env RAW BYTES:\n", repr(raw_bytes))
-    except Exception as e:
-        print("❌ [DEBUG] Failed to read .env:", e)
-        return {}
-
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    local_env_path = os.path.join(base_dir, "cyphera", ".env")
     env_vars = dotenv_values(local_env_path)
-    print("🔍 [DEBUG] Parsed DB environment variables:", env_vars)
     return env_vars
-
 
 def connect_postgres_and_print_tables(db_name):
     env_vars = get_db_env_vars()
     db_user = env_vars.get("DB_USER")
     db_password = env_vars.get("DB_PASSWORD")
     db_host = env_vars.get("DB_HOST")
-    db_port = env_vars.get("DB_PORT", "5434")
+    db_port = env_vars.get("DB_PORT", "5434")  # Your default port per screenshot
 
     db_url = f"{db_host}:{db_port}/{db_name}"
     print(f"🔍 [DEBUG] Connecting to DB at: {db_url}")
@@ -292,7 +293,9 @@ def connect_postgres_and_print_tables(db_name):
             port=db_port
         )
         cur = conn.cursor()
-        cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+        cur.execute("""
+            SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
+        """)
         tables = cur.fetchall()
         print(f"📦 [DEBUG] Tables in DB '{db_name}':")
         for t in tables:

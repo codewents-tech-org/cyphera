@@ -34,7 +34,7 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
                     update_afr(tree, "technical_tree")
                 
                 if tree_id:
-                    update_technical_tree_table(tree, "technical_tree")
+                    update_technical_tree_table(tree_id, "technical_tree")
 
                 for tree in risk_control_tree_ids:
                     update_afr(tree, "risk_control_tree")
@@ -66,8 +66,8 @@ def update_afr_values(updated_leaf_list: list, tree_id: str = None, tree_type: s
                     update_riskcontrol_tree_table(tree)
                 
                 if tree_id:
-                    update_technical_tree_table(tree, "risk_control_tree")
-                    update_riskcontrol_tree_table(tree)
+                    update_technical_tree_table(tree_id, "risk_control_tree")
+                    update_riskcontrol_tree_table(tree_id)
 
                 for tree in attack_tree_ids:
                     update_afr(tree, "attack_tree")
@@ -228,9 +228,12 @@ def update_afr(tree_id: str, tree_type: str):
                         'rf_value': '',
                         'rf_level': ''
                     }
-                    if 'resid_afr' in output and 'rf_sum' in output['resid_afr'] and output['resid_afr']['rf_sum'] is not None:
-                        update_data['rf_value'] = str(output['resid_afr']['rf_sum'])
-                        update_data['rf_level'] = calculate_afr_Level(output['resid_afr']['rf_sum'])
+                    if output["resid_afr"] is not None:
+                        afr_value = output['resid_afr']['afr_sum']
+                        if afr_value is not None:
+                            rf_text = "0" if str(afr_value) == "inf" else str(afr_value)
+                            update_data['rf_value'] = rf_text
+                            update_data['rf_level'] = calculate_afr_Level(int(rf_text))
                     
                     update_instance(AttackTree, {'tree_id': tree_id, 'node_type': NodeType.HEAD, 'is_deleted': False}, update_data)
 

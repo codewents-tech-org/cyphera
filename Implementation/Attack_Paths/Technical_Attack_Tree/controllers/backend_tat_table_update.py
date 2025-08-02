@@ -23,7 +23,7 @@ def update_technical_tree_table(tree_id: str=None, tree_type: str=None):
                 for node in nodes:
                     if node.node_id not in technical_tree_ids:
                         technical_tree_ids.append(node.node_id)
-
+                
                 for tat_id in technical_tree_ids:
                     risk_control_tree_ids = []
                     nodes = get_instances(RiskControlTree, {'node_id': tat_id, 'is_deleted': False})
@@ -32,7 +32,7 @@ def update_technical_tree_table(tree_id: str=None, tree_type: str=None):
                             if node.tree_id not in risk_control_tree_ids:
                                 risk_control_tree_ids.append(node.tree_id)
                     risk_control_tree_map[tat_id] = risk_control_tree_ids
-
+                
                 for tat_id, rct_ids in risk_control_tree_map.items():
                     if rct_ids:
                         result = ', '.join(rct_ids)
@@ -50,6 +50,7 @@ def update_technical_tree_table(tree_id: str=None, tree_type: str=None):
                 for node in nodes:
                     if node.node_id not in risk_control_tree_ids:
                         risk_control_tree_ids.append(node.node_id)
+                
                 for rct_id in risk_control_tree_ids:
                     nodes = get_instances(RiskControlTree, {'tree_id': rct_id, 'node_type': NodeType.TAT_HEAD, 'is_deleted': False})
                     if nodes:
@@ -65,23 +66,27 @@ def update_technical_tree_table(tree_id: str=None, tree_type: str=None):
                         for node in nodes:
                             if node.tree_id not in attack_tree_ids:
                                 attack_tree_ids.append(node.tree_id)
-                    
+
                     nodes = get_instances(RiskControlTree, {'node_id': tat_id, 'node_type': NodeType.TAT_HEAD, 'is_deleted': False})
                     if nodes:
                         for node in nodes:
                             if node.tree_id not in rct_ids:
                                 rct_ids.append(node.tree_id)
                     
-                    attack_tree_map[tat_id] = [attack_tree_ids, rct_ids]
-
-                for tat_id, (attack_ids, rct_tree_ids) in attack_tree_map.items():
+                    for rct_id in rct_ids:
+                        nodes = get_instances(AttackTree, {'node_id': rct_id, 'node_type': NodeType.RCT_HEAD, 'is_deleted': False})
+                        for node in nodes:
+                            if node.node_id not in attack_tree_ids:
+                                attack_tree_ids.append(node.tree_id)
+                    
+                    attack_tree_map[tat_id] = attack_tree_ids
+                
+                for tat_id, attack_ids in attack_tree_map.items():
                     threat_result = ''
-                    sc_result = ''
                     if attack_ids:
                         threat_result = ', '.join(attack_ids)
-                    if rct_tree_ids:
-                        sc_result = ', '.join(rct_tree_ids)
-                    update_instance(TechnicalTreeHome, {'id':tat_id, 'is_deleted':False}, {'used_in_threat': threat_result, 'used_in_riskcontrol': sc_result})
+                    update_instance(TechnicalTreeHome, {'id':tat_id, 'is_deleted':False}, {'used_in_threat': threat_result})
+            
             case "technical_tree":
                 attack_tree_ids = []
                 rct_ids = []
@@ -96,6 +101,12 @@ def update_technical_tree_table(tree_id: str=None, tree_type: str=None):
                     for node in nodes:
                         if node.tree_id not in rct_ids:
                             rct_ids.append(node.tree_id)
+                            
+                for rct_id in rct_ids:
+                    nodes = get_instances(AttackTree, {'node_id': rct_id, 'node_type': NodeType.RCT_HEAD, 'is_deleted': False})
+                    for node in nodes:
+                        if node.node_id not in attack_tree_ids:
+                            attack_tree_ids.append(node.tree_id)
                 
                 threat_result = ''
                 sc_result = ''

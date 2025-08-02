@@ -15,21 +15,7 @@ GenerateReport_path = ''
 GeneratePdfReport_path = ''
 GeneratePENTestReport_path = ''
 GeneratePENTestPdfReport_path = ''
-selected_cloud_folder = ""      # 📁 Current selected folder on cloud UI
-selected_cloud_file = ""        # 📄 Current selected .tara file
-remote_project_path = ""        # 🌐 Full path to selected .tara (REMOTE_BASE_PATH + /folder/file)
 
-
-ssh_transport = None           # Store active SSH session
-sftp = None                    # Store active SFTP session
-project_storage_mode = 'local'  # or 'cloud'
-
-db_type = ''                  # 'postgres', 'sqlite', etc.
-db_user = ''
-db_password = ''
-db_host = ''
-db_port = ''
-current_db_name = ''
 #===== Colour Parameters =====#
 
 Black = '#151515'
@@ -111,8 +97,7 @@ import_icon = "assets/Images/import.png"
 new_icon = "assets/Images/new.png"
 rightarrow_icon = "assets/Images/right_arrow.png"
 downarrow_icon = "assets/Images/down_arrow.png"
-local_icon = "assets/Images/local_icon.svg"
-cloud_icon = "assets/Images/cloud_icon.svg"
+
 #===== Module Icons =====#
 TargetOfEvaluation_icon = "assets/Images/target_of_Evaluation.svg"
 Analysis_icon = "assets/Images/analysis.svg"
@@ -169,7 +154,6 @@ headnode_icon = "assets/Attack_Assets/headNode.png"
 # Summary_icon = "images/normal/Summary.png"
 # exit_icon = "images/pro/exit.png"
 loader_icon = "assets/Images/loader.svg"
-loader_gif = "assets/Images/loader.gif"
 #===== Asset Icons =====#
 Reload_icon = "assets/Images/refresh.png"
 addrow_icon = "assets/Images/addrow.png"
