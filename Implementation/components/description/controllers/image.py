@@ -42,7 +42,8 @@ from shutil import copyfile
 import uuid
 import models.Parameters as P
 from ..image_editor_dialog import ResizableImageDialog
-
+import shutil
+import ntpath  # For cross-platform path handling
 logger = logging.getLogger(__name__)
 
 class ImageController:
@@ -73,27 +74,26 @@ class ImageController:
     def insert_picture(self) -> bool:
         """
         Prompts the user to select and optionally resize an image file,
-        saves it inside the project's `descriptionimage/` folder,
+        saves it inside the project's `descriptionimage/` folder (local or cloud),
         and inserts it into the QTextEdit using a relative path.
         """
         try:
+            import uuid
+            import ntpath
+            from utils.server_connection import get_sftp
+
             # Step 0: Ensure project path is set
             project_path = P.project_path
             if not project_path:
-                QMessageBox.warning(
-                    self.text_edit,
-                    "Error",
-                    "Project path is not set."
-                )
+                QMessageBox.warning(self.text_edit, "Error", "Project path is not set.")
                 return False
             print(f"[DEBUG] Project path: {project_path}")
 
-            # Step 1: Create `descriptionimage/` folder if not exists
+            # Step 1: Define image folder path
             image_folder = os.path.join(project_path, "descriptionimage")
-            os.makedirs(image_folder, exist_ok=True)
-            print(f"[DEBUG] Ensured image folder exists: {image_folder}")
+            print(f"[DEBUG] Target image folder: {image_folder}")
 
-            # Step 2: Prompt file picker
+            # Step 2: Prompt image file selection
             fname, _ = QFileDialog.getOpenFileName(
                 self.text_edit,
                 "Select Image File",
@@ -116,20 +116,38 @@ class ImageController:
             temp_resized_path, width, height = dlg.get_resized_image()
             print(f"[DEBUG] Resized image saved at: {temp_resized_path} with size {width}x{height}")
 
-            # Step 4: Generate unique filename and move resized image to project folder
-            import uuid
+            # Step 4: Create unique file name
             ext = os.path.splitext(fname)[1].lower()
             unique_name = f"img_{uuid.uuid4().hex[:8]}{ext}"
             final_image_path = os.path.join(image_folder, unique_name)
-            os.replace(temp_resized_path, final_image_path)
-            print(f"[DEBUG] Final image moved to: {final_image_path}")
 
-            # Step 5: Calculate relative path for QTextEdit
+            # Step 5: Store image locally or via SFTP
+            if P.project_storage_mode == "cloud":
+                # Ensure SFTP path exists and upload
+                file_name = ntpath.basename(final_image_path)
+                transport, sftp = get_sftp()
+                try:
+                    try:
+                        sftp.chdir(image_folder)
+                    except IOError:
+                        sftp.mkdir(image_folder)
+                        sftp.chdir(image_folder)
+                    sftp.put(temp_resized_path, os.path.join(image_folder, file_name).replace("\\", "/"))
+                    print(f"[DEBUG] ✅ Uploaded image to cloud path: {image_folder}/{file_name}")
+                finally:
+                    sftp.close()
+                    transport.close()
+            else:
+                os.makedirs(image_folder, exist_ok=True)
+                os.replace(temp_resized_path, final_image_path)
+                print(f"[DEBUG] ✅ Moved image to local path: {final_image_path}")
+
+            # Step 6: Compute relative path
             relative_image_path = os.path.relpath(final_image_path, start=project_path)
-            relative_image_path = relative_image_path.replace("\\", "/")  # always forward slashes
+            relative_image_path = relative_image_path.replace("\\", "/")
             print(f"[DEBUG] Relative image path to insert: {relative_image_path}")
 
-            # Step 6: Insert image in QTextEdit
+            # Step 7: Insert into QTextEdit
             cursor = self.text_edit.textCursor()
             cursor.beginEditBlock()
             cursor.movePosition(QTextCursor.End)
@@ -139,12 +157,15 @@ class ImageController:
             cursor.insertBlock(blk_fmt)
 
             img_fmt = QTextImageFormat()
-            img_fmt.setName(relative_image_path)
+            if P.project_storage_mode == "cloud":
+                preview_local_path = temp_resized_path.replace("\\", "/")
+                img_fmt.setName(preview_local_path)
+            else:
+                img_fmt.setName(relative_image_path)
             img_fmt.setWidth(width)
             img_fmt.setHeight(height)
             cursor.insertImage(img_fmt)
 
-            # Add new empty block
             cursor.insertBlock()
             cursor.mergeCharFormat(self.text_edit.currentCharFormat())
             cursor.endEditBlock()
@@ -152,22 +173,14 @@ class ImageController:
             self.text_edit.setTextCursor(cursor)
             self.text_edit.setFocus()
 
-            # Step 7: Notify editor (optional update toolbar)
-            parent = self.text_edit.parent()
-            if hasattr(parent, "update_toolbar_state"):
-                parent.update_toolbar_state()
+            if hasattr(self.text_edit.parent(), "update_toolbar_state"):
+                self.text_edit.parent().update_toolbar_state()
 
             logger.info("Inserted image '%s' (%dx%d)", relative_image_path, width, height)
-            print(f"[DEBUG] Image inserted successfully!")
-
+            print("[DEBUG] Image inserted successfully!")
             return True
 
         except Exception as e:
             logger.exception("Image insert failed")
-            QMessageBox.critical(
-                self.text_edit,
-                "Error",
-                f"Image insert failed:\n{e}"
-            )
+            QMessageBox.critical(self.text_edit, "Error", f"Image insert failed:\n{e}")
             return False
-
