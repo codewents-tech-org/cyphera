@@ -181,7 +181,7 @@ class Threat_Module(QWidget):
         self.update_button_states()
         self.previous_text = None
 
-    def on_row_selection_changed(self, selected, deselected):
+    def on_row_selection_changed(self, selected, deselected): 
         """
         Handles row selection:
         - Emits structured row data
@@ -257,26 +257,26 @@ class Threat_Module(QWidget):
         self.loader.show()
         QApplication.processEvents()
 
-        # ✅ 1. Populate dropdown options
+        # ✅ 1. Populate dropdown options in unified format
         self.damage_scenarios_option_list = [
             f"{ds.ds_id}::{ds.name}" for ds in get_instances(DamageScenarios)
         ]
-        self.threat_damage_scenarios_input.additem(self.damage_scenarios_option_list)
-        self.threat_damage_scenarios_input.set_text('')
-
         self.toe_configuration_option_list = [
             f"{toec.toe_configuration_id}::{toec.toe_configuration_name}" for toec in get_instances(TOEConfiguration)
         ]
-        self.threat_toe_configuration_input.additem(self.toe_configuration_option_list)
-        self.threat_toe_configuration_input.set_text('')
-
         self.misuse_cases_option_list = [
             f"{ms.misuse_cases_id}::{ms.misuse_cases_name}" for ms in get_instances(Misusecases)
         ]
+
+        # ✅ 2. Populate property panel dropdowns (optional UI filters)
+        self.threat_damage_scenarios_input.additem(self.damage_scenarios_option_list)
+        self.threat_damage_scenarios_input.set_text('')
+        self.threat_toe_configuration_input.additem(self.toe_configuration_option_list)
+        self.threat_toe_configuration_input.set_text('')
         self.threat_misuse_cases_input.additem(self.misuse_cases_option_list)
         self.threat_misuse_cases_input.set_text('')
 
-        # ✅ 2. Define mapping from UI headers → DB fields (used in table)
+        # ✅ 3. Column → DB field map
         self.threat_column_field_map = {
             "ID": "threat_id",
             "Name": "name",
@@ -291,24 +291,21 @@ class Threat_Module(QWidget):
             "Comments": "comments"
         }
 
-        # ✅ 3. Specify which columns are dropdowns
+        # ✅ 4. Columns with dropdown options
         self.threat_dropdown_columns = {
             "Damage Scenarios": self.damage_scenarios_option_list,
             "TOE Configuration": self.toe_configuration_option_list,
             "Misuse cases": self.misuse_cases_option_list
         }
 
-        threat_headers = list(self.threat_column_field_map.keys())  # Ordered list of headers
-
-        # ✅ 4. Load threats from DB
-        print("🔄 Loading threat records...")
+        # ✅ 5. Load rows
         self.table.setRowCount(0)
+        self.row_uuid_map = {}
         threats = load_all_threats()
+        threat_headers = list(self.threat_column_field_map.keys())
 
         for row_idx, threat in enumerate(threats):
             self.table.insertRow(row_idx)
-            is_selected = (row_idx == self.table.currentRow())
-            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
             
 
             for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
@@ -321,10 +318,9 @@ class Threat_Module(QWidget):
                 else:
                     self.table.setItem(row_idx, col_idx, QTableWidgetItem(value))
 
-            # Map row to UUID for later updates
+            # Map UUID
             self.row_uuid_map[row_idx] = threat.uuid
 
-        # ✅ 5. Final cleanup
         interfaces.unsaved_changes = False
         self.loader.close()
         print("✅ Threat table loaded successfully.")
@@ -382,9 +378,6 @@ class Threat_Module(QWidget):
         persist_threat_changes()
         print("🗃️ All changes persisted to DB")
         interfaces.unsaved_changes = False
-
-
-
 
     def on_threat_property_name_changed(self): PVD.on_property_multiline_changed(self.table, 2, self.threat_name_input)
     def on_threat_property_DS_changed(self):
@@ -523,27 +516,24 @@ class Threat_Module(QWidget):
             self.property_panel_manager.toggle_button.click()
 
     def add_multiselect_to_table_cell(self, row_index, column_index, option_list, current_value, update_field):
-        """
-        Generic helper for adding MultiSelectComboSelector to Threats table.
-
-        Args:
-            row_index (int): Table row index.
-            column_index (int): Table column index.
-            option_list (list[str]): List of selectable options.
-            current_value (str): Pre-selected value from DB (comma-separated string).
-            update_field (str): Field to update in backend via `update_threat`.
-
-        """
         combo = MultiSelectComboSelector(option_list, placeholder="Select")
-        
-        # Set pre-selected items
+
+        # 🔍 Clean and split pre-selected values
+        selected_items = []
         if current_value:
             if isinstance(current_value, str):
                 selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
-            else:
+            elif isinstance(current_value, list):
                 selected_items = current_value
-            combo.set_selected_items(selected_items)
 
+        print(f"🧩 Row {row_index} | Field: {update_field}")
+        print(f"   ↪ DB Value: '{current_value}'")
+        print(f"   ↪ Selected Items: {selected_items}")
+        print(f"   ↪ Options: {option_list}")
+
+        combo.set_selected_items(selected_items)
+
+        # ✅ On change, update value in DB + UI
         def on_selection_change():
             value = ", ".join(combo.selected_items())
             self.table.setItem(row_index, column_index, QTableWidgetItem(value))
@@ -554,6 +544,7 @@ class Threat_Module(QWidget):
 
         combo.model().dataChanged.connect(on_selection_change)
         self.table.setCellWidget(row_index, column_index, combo)
+
         
 
 
