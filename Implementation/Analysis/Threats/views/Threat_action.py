@@ -192,7 +192,9 @@ class Threat_Module(QWidget):
         TVH.on_row_selection_changed(self.table)
 
         current_row = self.table.currentRow()
+        print(current_row)
         total_rows = self.table.rowCount()
+        print(total_rows)
 
         # ✅ Highlight selected row's dot
         for row in range(total_rows):
@@ -202,7 +204,7 @@ class Threat_Module(QWidget):
 
         # ✅ Display data in property panel and emit signal
         if current_row >= 0:
-            self.display_row_data_in_panel(None)
+            
 
             data = {
                 "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
@@ -211,16 +213,19 @@ class Threat_Module(QWidget):
                 "TOE Configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
                 "Misuse Cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
                 "Asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
-                "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
+                "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",  # ✅ FIXED
                 "Reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
                 "Comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
             }
+            print(data)
 
             payload = {
                 "sender": "Table",
                 "event": "row_selected",
                 "data": data
             }
+            print(payload)
+            self.display_row_data_in_panel(payload["data"])
             self.row_selected.emit(payload)
 
         self.update_button_states()
@@ -281,7 +286,7 @@ class Threat_Module(QWidget):
             "Initial AFR": "initia_afr",
             "Resid AFR": "resid_afr",
             "Asset": "asset_id",
-            "Security Properties": "security_properties",
+            "Security Property": "security_properties",
             "Reasoning": "reasoning",
             "Comments": "comments"
         }
@@ -410,9 +415,29 @@ class Threat_Module(QWidget):
     def on_threat_property_reasoning_changed(self): PVD.on_property_multiline_changed(self.table, 10, self.threat_reasoning_input)
     def on_threat_property_comment_changed(self): PVD.on_property_multiline_changed(self.table, 11, self.threat_comments_input)
     def display_selected_row(self):
+        """
+        Triggers the display of currently selected row data in the property panel.
+        """
         temp = interfaces.unsaved_changes
-        # PVD.threat_display_selected_row(self.table, self.threat_property_controls, self.damage_scenarios_option_list,self.toe_configuration_option_list, self.misuse_cases_option_list,self.property_panel,self.toggle_button)
+        current_row = self.table.currentRow()
+        if current_row < 0:
+            return
+
+        data = {
+            "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+            "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+            "Damage Scenarios": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
+            "TOE Configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
+            "Misuse Cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
+            "Asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
+            "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
+            "Reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
+            "Comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
+        }
+
+        self.display_row_data_in_panel(data)
         interfaces.unsaved_changes = temp
+
 
     def closeEvent(self, event):
         event.accept()
@@ -463,54 +488,28 @@ class Threat_Module(QWidget):
 
     def display_row_data_in_panel(self, data):
         print("[DEBUG] display_row_data_in_panel called with:", data)
-        row = self.table.currentRow()
-        if row < 0:
+        if not data:
             return
 
-        # Map each field to its actual column index in the table
-        label_column_map = {
-            "ID": 1,
-            "Name": 2,
-            "Damage Scenarios": 3,
-            "TOE Configuration": 4,
-            "Misuse Cases": 5,
-            "Asset": 8,
-            "Security Property": 9,
-            "Reasoning": 10,
-            "Comments": 11,
-        }
-
         for label, widget in self.threat_property_controls:
-            col = label_column_map.get(label)
-            if col is None:
-                continue
-
-            table_item = self.table.item(row, col)
-            cell_widget = self.table.cellWidget(row, col)
+            value = data.get(label, "")
 
             # Multi-select
             if hasattr(widget, "set_selected_items"):
-                text = table_item.text() if table_item else ""
-                selected_items = [x.strip() for x in text.split(",") if x.strip()]
+                selected_items = [x.strip() for x in value.split(",") if x.strip()]
                 widget.set_selected_items(selected_items)
 
-            # Dropdown/single line
             elif hasattr(widget, "setCurrentText"):
-                value = table_item.text().strip() if table_item and table_item.text() else ""
-                widget.setCurrentText(value)
+                widget.setCurrentText(value.strip())
 
-            # Plain text
             elif hasattr(widget, "setText"):
-                value = table_item.text().strip() if table_item and table_item.text() else ""
-                widget.setText(value)
+                widget.setText(value.strip())
 
             elif hasattr(widget, "setPlainText"):
-                value = table_item.text().strip() if table_item and table_item.text() else ""
-                widget.setPlainText(value)
+                widget.setPlainText(value.strip())
 
             elif hasattr(widget, "set_text"):
-                value = table_item.text().strip() if table_item and table_item.text() else ""
-                widget.set_text(value)
+                widget.set_text(value.strip())
 
         # Expand panel if hidden
         if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
