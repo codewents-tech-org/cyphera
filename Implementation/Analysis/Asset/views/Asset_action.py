@@ -231,10 +231,7 @@ class Asset_Module(QWidget):
 
     def on_row_selection_changed(self, selected, deselected):
         """
-        Handles row selection:
-        - Emits structured row data
-        - Highlights only the selected row's sidebar indicator (dot)
-        - Updates property panel and button states
+        Handles row selection by loading data into the property panel.
         """
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
@@ -242,21 +239,18 @@ class Asset_Module(QWidget):
         current_row = self.table.currentRow()
         total_rows = self.table.rowCount()
 
-        # ✅ Highlight dot indicator on the selected row
+        # Highlight only the selected row's sidebar indicator
         for row in range(total_rows):
             widget = self.table.cellWidget(row, 0)
             if isinstance(widget, TRI.SidebarWidget):
                 widget.set_selected(row == current_row)
 
-        # ✅ Load data into property panel
+        # Load data into property panel
         if current_row >= 0:
-            self.display_row_data_in_panel(None)
-
-            # ✅ Emit structured signal with current row data
             data = {
                 "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
                 "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
-                "Security Properties": ", ".join(self.table.cellWidget(current_row, 3).selected_items()) if self.table.cellWidget(current_row, 3) else "",
+                "Security Properties": self.table.cellWidget(current_row, 3).selected_items() if self.table.cellWidget(current_row, 3) else [],
                 "Description": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
                 "Comments": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
             }
@@ -266,8 +260,8 @@ class Asset_Module(QWidget):
                 "data": data
             }
             self.row_selected.emit(payload)
-
-        # ✅ Refresh buttons
+            
+        # Refresh buttons
         self.update_button_states()
         interfaces.unsaved_changes = temp
 
@@ -544,6 +538,10 @@ class Asset_Module(QWidget):
         from models.helper import asset_security_properties_menu
 
         combo = MultiSelectComboSelector(asset_security_properties_menu, placeholder="Select")
+
+        # Ensure unique state per widget
+        combo.row_index = row_index  
+
         if current_value:
             if isinstance(current_value, str):
                 selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
@@ -551,18 +549,24 @@ class Asset_Module(QWidget):
                 selected_items = current_value
             combo.set_selected_items(selected_items)
 
+        # Disconnect existing signal to prevent multiple triggers
+        try:
+            combo.model().dataChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+
+        # Proper signal handling to update the right row
         def on_selection_change():
-            value = ", ".join(combo.selected_items())
-            self.table.setItem(row_index, 3, QTableWidgetItem(value))
-            if hasattr(self, 'row_id_map') and row_index in self.row_id_map:
-                asset_id = self.row_id_map[row_index]
-                from Analysis.controllers.asset_manager import update_asset
-                update_asset(asset_id, {"security_properties": value})
+            selected_value = ", ".join(combo.selected_items())
+            self.table.setItem(combo.row_index, 3, QTableWidgetItem(selected_value))
+            
+            if hasattr(self, 'row_id_map') and combo.row_index in self.row_id_map:
+                asset_id = self.row_id_map[combo.row_index]
+                update_asset(asset_id, {"security_properties": selected_value})
                 interfaces.unsaved_changes = True
 
         combo.model().dataChanged.connect(on_selection_change)
         self.table.setCellWidget(row_index, 3, combo)
-
 
                 
 class InlineSidebarWidget(QWidget):

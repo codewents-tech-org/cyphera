@@ -202,7 +202,7 @@ class Threat_Module(QWidget):
 
         # ✅ Display data in property panel and emit signal
         if current_row >= 0:
-            self.display_row_data_in_panel(None)
+            
 
             data = {
                 "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
@@ -211,7 +211,7 @@ class Threat_Module(QWidget):
                 "TOE Configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
                 "Misuse Cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
                 "Asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
-                "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
+                "Security Properties": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
                 "Reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
                 "Comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
             }
@@ -221,6 +221,7 @@ class Threat_Module(QWidget):
                 "event": "row_selected",
                 "data": data
             }
+            self.display_row_data_in_panel(payload["data"])
             self.row_selected.emit(payload)
 
         self.update_button_states()
@@ -482,7 +483,7 @@ class Threat_Module(QWidget):
             "TOE Configuration": 4,
             "Misuse Cases": 5,
             "Asset": 8,
-            "Security Property": 9,
+            "Security Properties": 9,
             "Reasoning": 10,
             "Comments": 11,
         }

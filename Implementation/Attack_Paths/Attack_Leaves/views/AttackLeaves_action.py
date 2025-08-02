@@ -59,6 +59,7 @@ class Attack_Leaves(QWidget):
         self.table.itemChanged.connect(self.set_unsaved_changes)
         self.table.itemDoubleClicked.connect(self.store_selected_entry)
         self.table.itemChanged.connect(self.find_duplicates)
+        self.table.selectionModel().selectionChanged.connect(self.on_row_selection_changed)
         self.table.selectionModel().selectionChanged.connect(self.update_button_states)
         self.update_button_states()
         self.previous_text = None
@@ -84,8 +85,8 @@ class Attack_Leaves(QWidget):
             self.table.insertRow(row_idx)
             self.table.setRowHeight(row_idx, 40)
             self.existing_entries.add(row.id)
-            sidebar = TRI.SidebarWidget()
-            self.table.setCellWidget(row_idx, 0, sidebar)
+            is_selected = (row == self.table.currentRow())
+            self.table.setCellWidget(row, 0, TRI.SidebarWidget(row_idx=row, selected=is_selected))
             id_item = QTableWidgetItem(row.id)
             id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
             self.table.setItem(row_idx, 1, id_item)
@@ -152,8 +153,14 @@ class Attack_Leaves(QWidget):
     def Submit_Changes(self):
         print("submit changes......")
         self.table.setFocus()
+
         for row_idx in range(self.table.rowCount()):
-            row_id = self.table.item(row_idx, 1).text()
+            item = self.table.item(row_idx, 1)
+            if item is None:
+                print(f"⚠️ Skipping row {row_idx}: missing ID column.")
+                continue  # Skip this row
+
+            row_id = item.text()
             uuid_in_cache = None
             for uuid, entry in ATTACK_LEAF_CACHE.items():
                 if entry['record'].id == row_id:
@@ -237,10 +244,23 @@ class Attack_Leaves(QWidget):
     def refrash_existing_entries(self):
         pass
 
-    def on_row_selection_changed(self): 
+    def on_row_selection_changed(self):
         temp = interfaces.unsaved_changes
         TVH.on_row_selection_changed(self.table)
         interfaces.unsaved_changes = temp
+
+        current_row = self.table.currentRow()
+        if current_row < 0:
+            return
+
+        # Optional: highlight selected row's sidebar dot
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if isinstance(widget, TRI.SidebarWidget):
+                widget.set_selected(row == current_row)
+
+        # Optional: update button states
+        self.update_button_states()
 
     def Update_AFR_Level(self, item):
         selected_row = self.table.currentRow()
