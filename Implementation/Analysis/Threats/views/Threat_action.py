@@ -182,6 +182,7 @@ class Threat_Module(QWidget):
         self.previous_text = None
 
     def on_row_selection_changed(self, selected, deselected): 
+        print("-------------------------on_row_selection_changed------------------------")
         """
         Handles row selection:
         - Emits structured row data
@@ -189,11 +190,13 @@ class Threat_Module(QWidget):
         - Updates property panel and button states
         """
         temp = interfaces.unsaved_changes
-        TVH.on_row_selection_changed(self.table)
+        # TVH.on_row_selection_changed(self.table)
 
         current_row = self.table.currentRow()
+        print("-----------curentrow-------------")
         print(current_row)
         total_rows = self.table.rowCount()
+        print("-----------totalrow-------------")
         print(total_rows)
 
         # ✅ Highlight selected row's dot
@@ -207,16 +210,18 @@ class Threat_Module(QWidget):
             
 
             data = {
-                "ID": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
-                "Name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
-                "Damage Scenarios": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
-                "TOE Configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
-                "Misuse Cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
-                "Asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
-                "Security Property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",  # ✅ FIXED
-                "Reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
-                "Comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
+                "id": self.table.item(current_row, 1).text() if self.table.item(current_row, 1) else "",
+                "name": self.table.item(current_row, 2).text() if self.table.item(current_row, 2) else "",
+                "damage_scenarios": self.table.item(current_row, 3).text() if self.table.item(current_row, 3) else "",
+                "toe_configuration": self.table.item(current_row, 4).text() if self.table.item(current_row, 4) else "",
+                "misuse_cases": self.table.item(current_row, 5).text() if self.table.item(current_row, 5) else "",
+                "asset": self.table.item(current_row, 8).text() if self.table.item(current_row, 8) else "",
+                "security_property": self.table.item(current_row, 9).text() if self.table.item(current_row, 9) else "",
+                "reasoning": self.table.item(current_row, 10).text() if self.table.item(current_row, 10) else "",
+                "comments": self.table.item(current_row, 11).text() if self.table.item(current_row, 11) else ""
             }
+
+            print("-----------data-------------")
             print(data)
 
             payload = {
@@ -224,6 +229,7 @@ class Threat_Module(QWidget):
                 "event": "row_selected",
                 "data": data
             }
+            print("-----------payload-------------")
             print(payload)
             self.display_row_data_in_panel(payload["data"])
             self.row_selected.emit(payload)
@@ -306,6 +312,8 @@ class Threat_Module(QWidget):
 
         for row_idx, threat in enumerate(threats):
             self.table.insertRow(row_idx)
+            is_selected = (row_idx == self.table.currentRow())
+            self.table.setCellWidget(row_idx, 0, TRI.SidebarWidget(row_idx=row_idx, selected=is_selected))
             
 
             for col_idx, header in enumerate(threat_headers, start=1):  # assuming column 0 is checkbox/icon
@@ -379,7 +387,16 @@ class Threat_Module(QWidget):
         print("🗃️ All changes persisted to DB")
         interfaces.unsaved_changes = False
 
-    def on_threat_property_name_changed(self): PVD.on_property_multiline_changed(self.table, 2, self.threat_name_input)
+    def on_threat_property_name_changed(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            value = self.threat_name_input.text()
+            self.table.setItem(row, 2, QTableWidgetItem(value))  # column 2 for "Name"
+            uuid = self.row_uuid_map.get(row)
+            if uuid:
+                update_threat(uuid, {"name": value})
+            interfaces.unsaved_changes = True
+            
     def on_threat_property_DS_changed(self):
         PVD.on_property_multiselect_changed(self.table, 3, self.threat_damage_scenarios_input)
 
@@ -391,14 +408,14 @@ class Threat_Module(QWidget):
             interfaces.unsaved_changes = True
 
     def on_threat_property_toec_changed(self):
-        PVD.on_property_multiselect_changed(self.table, 4, self.threat_toe_configuration_input)
-
         row = self.table.currentRow()
-        if row >= 0 and row in self.row_uuid_map:
-            uuid = self.row_uuid_map[row]
+        if row >= 0:
             value = ", ".join(self.threat_toe_configuration_input.selected_items())
-            update_threat(uuid, {"toe_configuration_id": value})
-            interfaces.unsaved_changes = True
+            self.table.setItem(row, 4, QTableWidgetItem(value))  # 4 = TOE column
+            uuid = self.row_uuid_map.get(row)
+            if uuid:
+                update_threat(uuid, {"toe_configuration_id": value})
+                interfaces.unsaved_changes = True
 
     def on_threat_property_MS_changed(self):
         PVD.on_property_multiselect_changed(self.table, 5, self.threat_misuse_cases_input)
@@ -455,8 +472,8 @@ class Threat_Module(QWidget):
             label = field["label"]
             input_type = field["type"]
             signal_handler = getattr(self, field.get("signal")) if field.get("signal") else None
-            items = field.get("items", None)
             readonly = field.get("readonly", False)
+            items = field.get("items", None)
 
             input_widget = self.property_factory.create_common_property_input(
                 label_text=label,
@@ -484,7 +501,18 @@ class Threat_Module(QWidget):
         self.property_save_clicked.connect(self.handle_property_save_signal)
 
     def handle_property_save_signal(self, payload):
-        print(f"[TARA] 🔔 Threat Save Signal Received → {payload}")
+        current_row = self.table.currentRow()
+        uuid = self.row_uuid_map.get(current_row)
+        if not uuid:
+            return
+
+        for key, value in payload["data"].items():
+            normalized = key.lower().replace(" ", "_")
+            for col, field in self.column_field_map.items():
+                if field == normalized:
+                    self.table.setItem(current_row, col, QTableWidgetItem(value))
+                    update_threat(uuid, {field: value})
+
 
     def display_row_data_in_panel(self, data):
         print("[DEBUG] display_row_data_in_panel called with:", data)
@@ -492,13 +520,21 @@ class Threat_Module(QWidget):
             return
 
         for label, widget in self.threat_property_controls:
-            value = data.get(label, "")
+            if not label or not isinstance(label, str):
+                print(f"[WARNING] Skipping invalid label: {label}")
+                continue
 
-            # Multi-select
+            key = label.lower().replace(" ", "_")
+            value = data.get(key, "")
+
+            print(f"[MAPPING] Label: {label} → key: {key} → value: {value}")
+
+            # Multi-select widgets
             if hasattr(widget, "set_selected_items"):
                 selected_items = [x.strip() for x in value.split(",") if x.strip()]
                 widget.set_selected_items(selected_items)
 
+            # ComboBox / line-like widgets
             elif hasattr(widget, "setCurrentText"):
                 widget.setCurrentText(value.strip())
 
@@ -510,6 +546,9 @@ class Threat_Module(QWidget):
 
             elif hasattr(widget, "set_text"):
                 widget.set_text(value.strip())
+
+            else:
+                print(f"[WARNING] No compatible setter found for {label}")
 
         # Expand panel if hidden
         if self.property_panel_manager.toggle_button and not self.property_panel_manager.toggle_button.isChecked():
@@ -525,7 +564,7 @@ class Threat_Module(QWidget):
                 selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
             elif isinstance(current_value, list):
                 selected_items = current_value
-
+        print("-------------------add_multiselect_to_table_cell------------------------")
         print(f"🧩 Row {row_index} | Field: {update_field}")
         print(f"   ↪ DB Value: '{current_value}'")
         print(f"   ↪ Selected Items: {selected_items}")

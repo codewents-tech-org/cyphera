@@ -73,7 +73,7 @@ Change History:
 
 from venv import logger
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidgetItem, QMessageBox, QHBoxLayout, QLabel
-
+from PyQt5.QtCore import Qt
 import Analysis.controllers.analysis_TableValueLoad as TVL
 import Analysis.controllers.analysis_TableAddRecord as TAR
 import Analysis.controllers.analysis_TableRemoveRecord as TRR
@@ -511,9 +511,11 @@ class Asset_Module(QWidget):
 
             # 🔁 For multi-select / combo boxes
             if hasattr(widget, "set_selected_items"):
-                text = table_item.text() if table_item else ""
-                selected = [x.strip() for x in text.split(",")] if text else []
-                widget.set_selected_items(selected)
+                if cell_widget and hasattr(cell_widget, "selected_items"):
+                    selected = cell_widget.selected_items()
+                    widget.set_selected_items(selected)
+                else:
+                    widget.set_selected_items([])
 
             # 🔁 For plain text fields
             elif hasattr(widget, "setText"):
@@ -532,39 +534,39 @@ class Asset_Module(QWidget):
                 value = table_item.text().strip() if table_item and table_item.text() else ""
                 widget.set_text(value)
 
-        # Optional: visually open the property panel
+        # ✅ Automatically open the property panel if it's collapsed
         if self.panel_manager.toggle_button and not self.panel_manager.toggle_button.isChecked():
             self.panel_manager.toggle_button.click()
 
     def add_multiselect_to_security_property_cell(self, row_index, current_value=None):
         from models.helper import asset_security_properties_menu
 
-        # ✅ Create a new instance of the combo selector per row
+        # 🔁 Always create a new instance
         combo = MultiSelectComboSelector(asset_security_properties_menu, placeholder="Select")
+
+        # ✅ Populate selection if value is provided
         if current_value:
-            if isinstance(current_value, str):
-                selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
-            else:
-                selected_items = current_value
+            selected_items = [x.strip() for x in current_value.split(",") if x.strip()]
             combo.set_selected_items(selected_items)
 
         def on_selection_change():
-            value = ", ".join(combo.selected_items())
-            self.table.setItem(row_index, 3, QTableWidgetItem(value))
-            if hasattr(self, 'row_id_map') and row_index in self.row_id_map:
+            selected = combo.selected_items()
+            value = ", ".join(selected)
+
+            # ❌ DO NOT call: self.table.setItem(row_index, 3, QTableWidgetItem(value))
+            # ✅ Instead: update internal state + backend cache
+            if row_index in self.row_id_map:
                 asset_id = self.row_id_map[row_index]
                 from Analysis.controllers.asset_manager import update_asset
                 update_asset(asset_id, {"security_properties": value})
                 interfaces.unsaved_changes = True
 
-        # ✅ Connect change listener
+        # ✅ React to selection changes
         combo.model().dataChanged.connect(on_selection_change)
 
-        # ✅ Place the widget in the table cell
+        # ✅ Inject the widget into the cell
         self.table.setCellWidget(row_index, 3, combo)
 
-
-                
 class InlineSidebarWidget(QWidget):
     def __init__(self, selected=False, parent=None):
         super().__init__(parent)
